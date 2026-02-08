@@ -16,10 +16,20 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
+            arch: x64
+            builder_args: --mac --x64
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+            builder_args: --mac --arm64
           - os: windows-latest
             platform: win
+            arch: x64
+            builder_args: --win
           - os: ubuntu-latest
             platform: linux
+            arch: x64
+            builder_args: --linux
 
     runs-on: ${{ matrix.os }}
 
@@ -47,28 +57,15 @@ jobs:
       - name: Build Vite
         run: npx vite build
 
-      - name: Build Electron (macOS)
-        if: matrix.platform == 'mac'
-        run: npx electron-builder --mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Electron (Windows)
-        if: matrix.platform == 'win'
-        run: npx electron-builder --win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Electron (Linux)
-        if: matrix.platform == 'linux'
-        run: npx electron-builder --linux
+      - name: Build Electron
+        run: npx electron-builder ${{ matrix.builder_args }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.platform }}
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             release/**/*.dmg
             release/**/*.exe
