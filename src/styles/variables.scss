@@ -1,0 +1,29 @@
+// ============================================
+// OpenCoding Design Tokens — Neumorphism
+// ============================================
+// Colors are CSS custom properties for runtime theme switching.
+// See global.scss for :root and [data-theme="light"] definitions.
+
+// Static layout sizes
+$sidebar-width: 260px;
+$tabbar-height: 40px;
+$statusbar-height: 24px;
+$titlebar-height: 38px;
+
+// Rounded corners (larger for neumorphism softness)
+$radius-sm: 8px;
+$radius-md: 12px;
+$radius-lg: 16px;
+$radius-xl: 20px;
+$radius-full: 9999px;
+
+// Fonts
+$font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+$font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+
+// Animation
+$ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+$duration-fast: 150ms;
+$duration-normal: 200ms;
+$duration-slow: 300ms;

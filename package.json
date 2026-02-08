@@ -1,0 +1,38 @@
+{
+  "name": "openclaudecoding",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build && electron-builder",
+    "preview": "vite preview",
+    "postinstall": "node -e \"const fs=require('fs'),path=require('path');['darwin-x64','darwin-arm64'].forEach(p=>{const f=path.join('node_modules/node-pty/prebuilds',p,'spawn-helper');try{fs.chmodSync(f,0o755)}catch{}})\"",
+    "rebuild": "npx electron-rebuild -f -w node-pty"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "ansi_up": "^6.0.6",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.1",
+    "pinia": "^3.0.4",
+    "vue": "^3.4.21",
+    "vue-router": "^5.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
+    "node-pty": "^1.1.0",
+    "sass": "^1.97.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.6",
+    "vite-plugin-electron": "^0.28.6",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vue-tsc": "^2.0.26"
+  },
+  "main": "dist-electron/main.js"
+}

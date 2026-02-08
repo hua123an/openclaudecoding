@@ -1,0 +1,495 @@
+@use './variables' as *;
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+// =============================================
+// macOS Glassmorphism Theme — CSS Custom Properties
+// =============================================
+
+// Light Theme (default — macOS 风格白色毛玻璃)
+:root {
+  // 基底色（统一纯白）
+  --neu-bg: #FFFFFF;
+  --neu-bg-alt: #FFFFFF;
+  --neu-bg-surface: #FFFFFF;
+  --neu-bg-hover: #F5F5F7;
+  --neu-bg-active: #EFEFEF;
+
+  // 阴影（保留兼容，但不再使用 neumorphism 凹凸）
+  --neu-shadow-light: rgba(255, 255, 255, 0.9);
+  --neu-shadow-dark: rgba(0, 0, 0, 0.08);
+
+  --neu-raised: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --neu-raised-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --neu-inset: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  --neu-inset-sm: inset 0 1px 1px rgba(0, 0, 0, 0.03);
+
+  // 文字色
+  --neu-text-primary: #1D1D1F;
+  --neu-text-secondary: #6E6E73;
+  --neu-text-muted: #AEAEB2;
+
+  // 强调色（近黑，极简）
+  --neu-accent: #1D1D1F;
+  --neu-accent-rgb: 29, 29, 31;
+  --neu-accent-hover: #000000;
+  --neu-success: #34C759;
+  --neu-warning: #FF9F0A;
+  --neu-error: #FF3B30;
+  --neu-purple: #1D1D1F;
+
+  // 边框
+  --neu-border: rgba(0, 0, 0, 0.06);
+  --neu-border-strong: rgba(0, 0, 0, 0.12);
+
+  --neu-overlay: rgba(0, 0, 0, 0.25);
+  --neu-scrollbar: rgba(0, 0, 0, 0.1);
+  --neu-scrollbar-hover: rgba(0, 0, 0, 0.2);
+
+  // ── Glassmorphism 核心（统一白色背景）──
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --glass-bg-alt: rgba(255, 255, 255, 0.92);
+  --glass-bg-surface: rgba(255, 255, 255, 0.88);
+  --glass-bg-hover: rgba(0, 0, 0, 0.03);
+  --glass-bg-active: rgba(0, 0, 0, 0.05);
+  --glass-blur: 24px;
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-border-strong: rgba(0, 0, 0, 0.12);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
+  --glass-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+// Dark Theme
+[data-theme="dark"] {
+  --neu-bg: #1C1C1E;
+  --neu-bg-alt: #161618;
+  --neu-bg-surface: #2C2C2E;
+  --neu-bg-hover: #3A3A3C;
+  --neu-bg-active: #48484A;
+
+  --neu-shadow-light: rgba(255, 255, 255, 0.04);
+  --neu-shadow-dark: rgba(0, 0, 0, 0.5);
+
+  --neu-raised: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --neu-raised-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --neu-inset: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  --neu-inset-sm: inset 0 1px 1px rgba(0, 0, 0, 0.15);
+
+  --neu-text-primary: #F5F5F7;
+  --neu-text-secondary: #A1A1A6;
+  --neu-text-muted: #636366;
+
+  --neu-accent: #E5E5EA;
+  --neu-accent-rgb: 229, 229, 234;
+  --neu-accent-hover: #FFFFFF;
+  --neu-success: #30D158;
+  --neu-warning: #FFD60A;
+  --neu-error: #FF453A;
+  --neu-purple: #E5E5EA;
+
+  --neu-border: rgba(255, 255, 255, 0.06);
+  --neu-border-strong: rgba(255, 255, 255, 0.1);
+
+  --neu-overlay: rgba(0, 0, 0, 0.6);
+  --neu-scrollbar: rgba(255, 255, 255, 0.08);
+  --neu-scrollbar-hover: rgba(255, 255, 255, 0.15);
+
+  // ── Glassmorphism 核心 ──
+  --glass-bg: rgba(28, 28, 30, 0.82);
+  --glass-bg-alt: rgba(22, 22, 24, 0.88);
+  --glass-bg-surface: rgba(44, 44, 46, 0.65);
+  --glass-bg-hover: rgba(255, 255, 255, 0.05);
+  --glass-bg-active: rgba(255, 255, 255, 0.08);
+  --glass-blur: 24px;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+  --glass-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+// =============================================
+// Global Base Styles
+// =============================================
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: $font-sans;
+  font-size: 13px;
+  color: var(--neu-text-primary);
+  background-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  transition: color $duration-slow $ease-out;
+}
+
+// Focus ring
+*:focus-visible {
+  outline: 2px solid var(--neu-accent);
+  outline-offset: 2px;
+}
+
+// Scrollbar
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--neu-scrollbar);
+  border-radius: $radius-full;
+  &:hover {
+    background: var(--neu-scrollbar-hover);
+  }
+}
+
+// =============================================
+// Neumorphic Button System
+// =============================================
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: $radius-md;
+  font-size: 13px;
+  font-family: $font-sans;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--neu-text-primary);
+  background: var(--glass-bg-surface);
+  transition: all $duration-fast $ease-out;
+
+  &:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-strong);
+  }
+
+  &:active {
+    background: var(--glass-bg-active);
+  }
+
+  &--primary {
+    background: var(--neu-accent);
+    color: white;
+    border-color: transparent;
+    &:hover {
+      background: var(--neu-accent-hover);
+    }
+  }
+
+  &--danger {
+    color: var(--neu-error);
+    &:hover {
+      background: var(--neu-error);
+      color: white;
+      border-color: transparent;
+    }
+  }
+
+  &--ghost {
+    background: transparent;
+    border-color: transparent;
+    &:hover {
+      background: var(--glass-bg-hover);
+      border-color: var(--glass-border);
+    }
+  }
+
+  &--sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+}
+
+// =============================================
+// Neumorphic Input
+// =============================================
+input, select {
+  background: var(--glass-bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: $radius-md;
+  color: var(--neu-text-primary);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: $font-sans;
+  outline: none;
+  transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
+
+  &:focus {
+    border-color: rgba(var(--neu-accent-rgb), 0.4);
+    box-shadow: 0 0 0 3px rgba(var(--neu-accent-rgb), 0.1);
+  }
+}
+
+// =============================================
+// Reduced Motion
+// =============================================
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+// =============================================
+// Markdown Code Block
+// =============================================
+.code-block {
+  margin: 10px 0;
+  border-radius: $radius-md;
+  overflow: hidden;
+  background: #1E2230;
+  border: 1px solid var(--glass-border);
+
+  [data-theme="light"] & {
+    background: #F0F2F6;
+  }
+}
+
+.code-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  [data-theme="light"] & {
+    background: rgba(0, 0, 0, 0.05);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+}
+
+.code-block__lang {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neu-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: $font-sans;
+}
+
+.code-block__pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+
+  code.hljs {
+    background: transparent;
+    padding: 0;
+    font-family: $font-mono;
+    font-size: 12.5px;
+    line-height: 1.65;
+  }
+}
+
+// =============================================
+// Markdown Inline Elements
+// =============================================
+.message-card__body--assistant {
+  p {
+    margin-bottom: 0.6em;
+    &:last-child { margin-bottom: 0; }
+  }
+
+  ul, ol {
+    padding-left: 1.4em;
+    margin-bottom: 0.6em;
+  }
+
+  li {
+    margin-bottom: 0.25em;
+  }
+
+  code:not(.hljs) {
+    font-family: $font-mono;
+    font-size: 0.92em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(var(--neu-accent-rgb), 0.07);
+    color: var(--neu-accent);
+  }
+
+  blockquote {
+    margin: 8px 0;
+    padding: 4px 12px;
+    border-left: 3px solid var(--neu-accent);
+    color: var(--neu-text-secondary);
+    background: rgba(var(--neu-accent-rgb), 0.04);
+    border-radius: 0 $radius-sm $radius-sm 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 6px 10px;
+    border: 1px solid var(--neu-border-strong);
+    text-align: left;
+  }
+
+  th {
+    background: rgba(var(--neu-accent-rgb), 0.05);
+    font-weight: 600;
+  }
+
+  strong { color: var(--neu-text-primary); }
+  em { color: var(--neu-text-secondary); }
+
+  a {
+    color: var(--neu-accent);
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--neu-text-primary);
+    margin: 0.8em 0 0.4em;
+    &:first-child { margin-top: 0; }
+  }
+
+  h1 { font-size: 1.3em; }
+  h2 { font-size: 1.15em; }
+  h3 { font-size: 1.05em; }
+
+  hr {
+    border: none;
+    height: 1px;
+    background: var(--neu-border-strong);
+    margin: 10px 0;
+  }
+}
+
+// =============================================
+// highlight.js Dark Theme (matches neumorphism)
+// =============================================
+.hljs {
+  color: #c0caf5;
+}
+
+.hljs-comment,
+.hljs-quote { color: #565f89; font-style: italic; }
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition { color: #bb9af7; }
+
+.hljs-number,
+.hljs-string,
+.hljs-meta .hljs-meta-string,
+.hljs-literal,
+.hljs-doctag,
+.hljs-regexp { color: #9ece6a; }
+
+.hljs-string { color: #9ece6a; }
+
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class { color: #7aa2f7; }
+
+.hljs-attribute,
+.hljs-attr { color: #e0af68; }
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-class .hljs-title,
+.hljs-type { color: #ff9e64; }
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-subst,
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-link { color: #73daca; }
+
+.hljs-built_in,
+.hljs-deletion { color: #f7768e; }
+
+.hljs-params { color: #c0caf5; }
+
+.hljs-formula { background: rgba(var(--neu-accent-rgb), 0.05); }
+
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+// Light theme highlight overrides
+[data-theme="light"] {
+  .hljs { color: #343b58; }
+
+  .hljs-comment,
+  .hljs-quote { color: #9699a3; }
+
+  .hljs-keyword,
+  .hljs-addition { color: #7847bd; }
+
+  .hljs-string { color: #485e30; }
+  .hljs-number,
+  .hljs-literal { color: #485e30; }
+
+  .hljs-title,
+  .hljs-section,
+  .hljs-name { color: #34548a; }
+
+  .hljs-attribute,
+  .hljs-attr { color: #8c6c3e; }
+
+  .hljs-variable,
+  .hljs-type { color: #965027; }
+
+  .hljs-built_in,
+  .hljs-deletion { color: #b15c79; }
+
+  .hljs-symbol,
+  .hljs-meta,
+  .hljs-link { color: #33635c; }
+}
+
+// =============================================
+// Diff 高亮（用于 language=diff 的代码块）
+// =============================================
+.code-block__pre code.hljs {
+  .hljs-addition {
+    color: #9ece6a;
+    background: rgba(158, 206, 106, 0.1);
+    display: inline-block;
+    width: 100%;
+  }
+
+  .hljs-deletion {
+    color: #f7768e;
+    background: rgba(247, 118, 142, 0.1);
+    display: inline-block;
+    width: 100%;
+  }
+
+  [data-theme="light"] & {
+    .hljs-addition {
+      color: #485e30;
+      background: rgba(72, 94, 48, 0.1);
+    }
+    .hljs-deletion {
+      color: #b15c79;
+      background: rgba(177, 92, 121, 0.1);
+    }
+  }
+}
