@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },
+  onMessageToolUse: (sessionId: string, callback: (toolUse: { name: string; input?: string }) => void) => {
+    const channel = `message:tool-use:${sessionId}`
+    const handler = (_event: any, toolUse: any) => callback(toolUse)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  },
 
   // ===== Image Dialog =====
   openImageDialog: () => ipcRenderer.invoke('dialog:open-images') as Promise<string[]>,

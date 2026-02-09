@@ -85,6 +85,9 @@ export function registerIpcHandlers(): void {
       onSessionId: (sessionId) => {
         win?.webContents.send(`message:sessionId:${opts.sessionId}`, sessionId)
       },
+      onToolUse: (toolUse) => {
+        win?.webContents.send(`message:tool-use:${opts.sessionId}`, toolUse)
+      },
       onDone: (code) => {
         win?.webContents.send(`message:done:${opts.sessionId}`, code)
       },

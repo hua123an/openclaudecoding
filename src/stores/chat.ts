@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
-import type { MessageBlock, SessionMessages, ExecutionItem } from '../types'
+import type { MessageBlock, SessionMessages, ExecutionItem, ExecutionType } from '../types'
 import { ansiToHtml, stripAnsi } from '../services/ansiRenderer'
 import { parseExecutions } from '../services/executionParser'
 import { renderMarkdown } from '../services/markdownRenderer'
@@ -13,16 +13,9 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** 轻量 HTML 转换：流式期间用，不做代码高亮 */
-function lightHtml(raw: string): string {
-  const cleaned = stripAnsi(raw)
-  return escapeHtml(cleaned)
-    .replace(/\n/g, '<br>')
-}
-
 /** 节流渲染管理器 */
 const renderTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const RENDER_INTERVAL = 150 // ms
+const RENDER_INTERVAL = 120 // ms
 
 export const useChatStore = defineStore('chat', () => {
   const sessionMap = reactive<Map<string, SessionMessages>>(new Map())
@@ -110,13 +103,14 @@ export const useChatStore = defineStore('chat', () => {
     msg.rawContent += rawChunk
     msg.updatedAt = Date.now()
 
-    // 立即用轻量渲染更新（无代码高亮，极快）
-    msg.htmlContent = lightHtml(msg.rawContent)
-
-    // 节流：每 150ms 做一次完整 Markdown 渲染
+    // 节流渲染：无 timer 时立即渲染 + 设冷却期；冷却期内只累积不渲染
     if (!renderTimers.has(sessionId)) {
+      // 立即渲染当前累积内容
+      msg.htmlContent = renderMarkdown(msg.rawContent)
+      // 设置冷却期，期间不再渲染
       renderTimers.set(sessionId, setTimeout(() => {
         renderTimers.delete(sessionId)
+        // 冷却结束，渲染冷却期间累积的内容
         if (msg.status === 'streaming') {
           msg.htmlContent = renderMarkdown(msg.rawContent)
         }
@@ -150,6 +144,34 @@ export const useChatStore = defineStore('chat', () => {
     }
     session.streamingMessageId = null
     session.isWaitingResponse = false
+  }
+
+  function addToolUse(sessionId: string, toolUse: { name: string; input?: string }): void {
+    const session = sessionMap.get(sessionId)
+    if (!session?.streamingMessageId) return
+    const msg = session.messages.find(m => m.id === session.streamingMessageId)
+    if (!msg) return
+
+    // 根据工具名映射为更具体的 execution type
+    const typeMap: Record<string, ExecutionType> = {
+      Read: 'file_read', Write: 'file_write', Edit: 'file_edit',
+      Bash: 'command_run', Glob: 'file_read', Grep: 'file_read',
+    }
+    const execType: ExecutionType = typeMap[toolUse.name] || 'tool_use'
+
+    // label: 工具名 + 关键详情
+    const label = toolUse.input
+      ? `${toolUse.name}: ${toolUse.input}`
+      : toolUse.name
+
+    msg.executions.push({
+      id: genId('exec'),
+      type: execType,
+      label,
+      detail: toolUse.input,
+      timestamp: Date.now(),
+      status: 'success',
+    })
   }
 
   function getFileOps(sessionId: string): ExecutionItem[] {
@@ -205,6 +227,7 @@ export const useChatStore = defineStore('chat', () => {
     startAssistantMessage,
     appendToStreaming,
     finalizeStreaming,
+    addToolUse,
     getFileOps,
     getToolCalls,
     getCommands,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import ChatView from '../chat/ChatView.vue'
 import ExecutionPanel from '../execution/ExecutionPanel.vue'
 import { useChatStore } from '../../stores/chat'
@@ -16,10 +16,13 @@ const settingsStore = useSettingsStore()
 const showExecPanel = ref(false)
 const messageCount = ref(0)
 
+const isStreaming = computed(() => chatStore.isWaiting(props.sessionId))
+
 let cleanupData: (() => void) | null = null
 let cleanupSessionId: (() => void) | null = null
 let cleanupDone: (() => void) | null = null
 let cleanupError: (() => void) | null = null
+let cleanupToolUse: (() => void) | null = null
 
 function getSession() {
   return sessionStore.workspaces
@@ -80,6 +83,11 @@ onMounted(async () => {
     chatStore.finalizeStreaming(props.sessionId)
     chatStore.addSystemMessage(props.sessionId, `[错误: ${error}]`)
   })
+
+  // 监听工具使用
+  cleanupToolUse = window.electronAPI.onMessageToolUse(props.sessionId, (toolUse) => {
+    chatStore.addToolUse(props.sessionId, toolUse)
+  })
 })
 
 onBeforeUnmount(() => {
@@ -87,6 +95,7 @@ onBeforeUnmount(() => {
   cleanupSessionId?.()
   cleanupDone?.()
   cleanupError?.()
+  cleanupToolUse?.()
   // 注意：不再自动 cancel —— 切换 session 时只是移除 listener，进程仍然在后台运行
   // 只有用户主动关闭 session 时才会调用 removeSession → messageCancel
 })
@@ -126,13 +135,18 @@ function toggleExecPanel() {
   showExecPanel.value = !showExecPanel.value
 }
 
+async function handleCancel() {
+  await window.electronAPI.messageCancel(props.sessionId)
+  chatStore.finalizeStreaming(props.sessionId)
+}
+
 defineExpose({ toggleExecPanel, showExecPanel })
 </script>
 
 <template>
   <div class="session-view">
     <div class="session-view__main">
-      <ChatView :session-id="sessionId" :tool-id="getSession()?.toolId" @send="handleSend" />
+      <ChatView :session-id="sessionId" :tool-id="getSession()?.toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="handleCancel" />
     </div>
     <transition name="slide-panel">
       <ExecutionPanel

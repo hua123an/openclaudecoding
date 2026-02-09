@@ -20,6 +20,7 @@ export interface MessageRunnerOpts {
   tempFile?: string
   onData: (data: string) => void
   onSessionId?: (sessionId: string) => void
+  onToolUse?: (toolUse: { name: string; input?: string }) => void
   onDone: (code: number) => void
   onError: (error: string) => void
 }
@@ -32,6 +33,8 @@ export class MessageRunner {
   private lineBuffers = new Map<string, string>()
   /** 已发送的 sessionId，避免重复 */
   private sessionIds = new Map<string, string>()
+  /** 工具调用追踪：sessionId → Map<blockIndex, { name, inputJson }> */
+  private toolBlocks = new Map<string, Map<number, { name: string; inputJson: string }>>()
 
   send(opts: MessageRunnerOpts) {
     this.cancel(opts.sessionId)
@@ -102,6 +105,38 @@ export class MessageRunner {
         if (event.text) {
           opts.onData(event.text)
         }
+
+        // 工具调用追踪
+        if (event.toolStart) {
+          let blocks = this.toolBlocks.get(opts.sessionId)
+          if (!blocks) {
+            blocks = new Map()
+            this.toolBlocks.set(opts.sessionId, blocks)
+          }
+          blocks.set(event.toolStart.index, { name: event.toolStart.name, inputJson: '' })
+        }
+
+        if (event.toolInputDelta) {
+          const blocks = this.toolBlocks.get(opts.sessionId)
+          const block = blocks?.get(event.toolInputDelta.index)
+          if (block) {
+            block.inputJson += event.toolInputDelta.json
+          }
+        }
+
+        if (event.toolEnd) {
+          const blocks = this.toolBlocks.get(opts.sessionId)
+          const block = blocks?.get(event.toolEnd.index)
+          if (block) {
+            blocks!.delete(event.toolEnd.index)
+            // 格式化为文本，注入消息流（像终端一样直接显示）
+            const formatted = this.formatToolUse(block.name, block.inputJson)
+            opts.onData(formatted)
+            // 同时发送结构化信息给 badges
+            const detail = this.extractToolDetail(block.name, block.inputJson)
+            opts.onToolUse?.({ name: block.name, input: detail })
+          }
+        }
       }
 
       this.lineBuffers.set(opts.sessionId, buf)
@@ -155,10 +190,113 @@ export class MessageRunner {
     })
   }
 
+  /** 格式化工具调用为纯文本（不使用任何 markdown 语法，避免与流式渲染冲突） */
+  private formatToolUse(toolName: string, inputJson: string): string {
+    if (!inputJson) return `\n\n⏺ ${toolName}\n\n`
+    try {
+      const input = JSON.parse(inputJson)
+      // 根据工具类型提取最关键的参数，仿照 Claude Code 终端显示
+      let detail = ''
+      switch (toolName) {
+        case 'Read':
+          detail = input.file_path || ''
+          break
+        case 'Write':
+          detail = input.file_path || ''
+          break
+        case 'Edit':
+          detail = input.file_path || ''
+          break
+        case 'Bash': {
+          const cmd = (input.command || '').replace(/\n/g, ' ')
+          detail = cmd.length > 150 ? cmd.slice(0, 150) + '...' : cmd
+          break
+        }
+        case 'Glob':
+          detail = input.pattern || ''
+          break
+        case 'Grep':
+          detail = input.pattern || ''
+          break
+        case 'WebFetch':
+          detail = input.url ? input.url.slice(0, 100) : ''
+          break
+        case 'WebSearch':
+          detail = input.query || ''
+          break
+        case 'Task':
+          detail = input.description || ''
+          break
+        default:
+          // 取第一个短字符串值
+          for (const val of Object.values(input)) {
+            if (typeof val === 'string' && val.length > 0 && val.length < 150) {
+              detail = val
+              break
+            }
+          }
+      }
+      if (detail) {
+        return `\n\n⏺ ${toolName}: ${detail}\n\n`
+      }
+      return `\n\n⏺ ${toolName}\n\n`
+    } catch {
+      return `\n\n⏺ ${toolName}\n\n`
+    }
+  }
+
+  /** 从工具输入 JSON 中提取关键信息作为显示标签 */
+  private extractToolDetail(toolName: string, inputJson: string): string {
+    if (!inputJson) return ''
+    try {
+      const input = JSON.parse(inputJson)
+      // 根据工具名提取最有意义的参数
+      switch (toolName) {
+        case 'Read':
+        case 'Write':
+        case 'Edit':
+          // 文件路径：取文件名部分
+          if (input.file_path) {
+            const parts = input.file_path.split('/')
+            return parts[parts.length - 1] || input.file_path
+          }
+          return ''
+        case 'Bash':
+          // 命令：截取前 60 字符
+          if (input.command) return input.command.slice(0, 60)
+          return ''
+        case 'Glob':
+          return input.pattern || ''
+        case 'Grep':
+          return input.pattern || ''
+        case 'WebFetch':
+          if (input.url) return input.url.slice(0, 60)
+          return ''
+        case 'WebSearch':
+          return input.query || ''
+        case 'TodoWrite':
+          return input.todos ? `${input.todos.length} items` : ''
+        case 'Task':
+          return input.description || ''
+        default:
+          // 通用：尝试取第一个字符串值
+          for (const val of Object.values(input)) {
+            if (typeof val === 'string' && val.length > 0) {
+              return val.length > 60 ? val.slice(0, 60) + '...' : val
+            }
+          }
+          return ''
+      }
+    } catch {
+      return ''
+    }
+  }
+
   private cleanup(sessionId: string) {
     this.processes.delete(sessionId)
     this.thinkingBuffers.delete(sessionId)
     this.lineBuffers.delete(sessionId)
+    this.toolBlocks.delete(sessionId)
   }
 
   cancel(sessionId: string) {
@@ -177,6 +315,7 @@ export class MessageRunner {
     this.thinkingBuffers.clear()
     this.lineBuffers.clear()
     this.sessionIds.clear()
+    this.toolBlocks.clear()
   }
 }
 

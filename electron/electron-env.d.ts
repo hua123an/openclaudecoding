@@ -37,6 +37,10 @@ interface ElectronAPI {
     sessionId: string,
     callback: (error: string) => void,
   ): () => void;
+  onMessageToolUse(
+    sessionId: string,
+    callback: (toolUse: { name: string; input?: string }) => void,
+  ): () => void;
 
   // Image Dialog
   openImageDialog(): Promise<string[]>;

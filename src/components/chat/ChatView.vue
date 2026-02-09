@@ -6,10 +6,12 @@ import { ref } from 'vue'
 defineProps<{
   sessionId: string
   toolId?: string
+  isStreaming?: boolean
 }>()
 
 const emit = defineEmits<{
   send: [text: string, imagePaths: string[], model?: string, thinking?: boolean]
+  cancel: []
 }>()
 
 const chatInputRef = ref<InstanceType<typeof ChatInput>>()
@@ -22,7 +24,7 @@ function handleSend(text: string, imagePaths: string[], model?: string, thinking
 <template>
   <div class="chat-view">
     <MessageList :session-id="sessionId" />
-    <ChatInput ref="chatInputRef" :tool-id="toolId" @send="handleSend" />
+    <ChatInput ref="chatInputRef" :tool-id="toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="emit('cancel')" />
   </div>
 </template>
 

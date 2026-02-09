@@ -6,10 +6,12 @@ import type { SkillItem } from '../../types'
 
 const props = defineProps<{
   toolId?: string
+  isStreaming?: boolean
 }>()
 
 const emit = defineEmits<{
   send: [text: string, imagePaths: string[], model?: string, thinking?: boolean]
+  cancel: []
 }>()
 
 const settingsStore = useSettingsStore()
@@ -299,6 +301,16 @@ defineExpose({ focus })
         @paste="handlePaste"
       ></textarea>
       <button
+        v-if="isStreaming"
+        class="chat-input__stop"
+        @click="emit('cancel')"
+        title="停止生成"
+      >
+        <span class="chat-input__stop-spinner"></span>
+        <span class="chat-input__stop-icon"></span>
+      </button>
+      <button
+        v-else
         class="chat-input__send"
         :disabled="!canSend"
         @click="handleSend"
@@ -732,6 +744,57 @@ $ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     opacity: 0.25;
     cursor: default;
   }
+}
+
+.chat-input__stop {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: $radius-full;
+  cursor: pointer;
+  position: relative;
+  transition: transform $duration-fast $ease-spring;
+
+  &:hover {
+    transform: scale(1.08);
+
+    .chat-input__stop-icon {
+      background: var(--neu-accent);
+    }
+  }
+
+  &:active {
+    transform: scale(0.92);
+  }
+}
+
+// 旋转弧线
+.chat-input__stop-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: $radius-full;
+  border: 2.5px solid var(--glass-border, var(--neu-border));
+  border-top-color: var(--neu-accent);
+  animation: spin-stop 0.8s linear infinite;
+}
+
+// 中心停止方块
+.chat-input__stop-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--neu-text-muted);
+  transition: background $duration-fast $ease-out;
+  z-index: 1;
+}
+
+@keyframes spin-stop {
+  to { transform: rotate(360deg); }
 }
 
 // 下拉动画

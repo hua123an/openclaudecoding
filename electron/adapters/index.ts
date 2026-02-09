@@ -25,7 +25,28 @@ function parseClaudeStreamEvent(line: string): StreamEventResult | null {
       result.text = obj.delta.text
     }
 
-    return (result.text || result.sessionId) ? result : null
+    // 工具调用开始：content_block_start type=tool_use
+    if (obj.type === 'content_block_start' && obj.content_block?.type === 'tool_use') {
+      result.toolStart = {
+        index: obj.index ?? 0,
+        name: obj.content_block.name,
+      }
+    }
+
+    // 工具输入 JSON 增量
+    if (obj.type === 'content_block_delta' && obj.delta?.type === 'input_json_delta') {
+      result.toolInputDelta = {
+        index: obj.index ?? 0,
+        json: obj.delta.partial_json ?? '',
+      }
+    }
+
+    // 工具调用块结束
+    if (obj.type === 'content_block_stop' && typeof obj.index === 'number') {
+      result.toolEnd = { index: obj.index }
+    }
+
+    return (result.text || result.sessionId || result.toolStart || result.toolInputDelta || result.toolEnd) ? result : null
   } catch {
     return null
   }

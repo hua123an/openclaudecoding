@@ -153,16 +153,17 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
         <!-- 执行操作标记 -->
         <div v-if="message.executions.length > 0" class="message-card__executions">
           <span
-            v-for="exec in message.executions.slice(0, 5)"
+            v-for="exec in message.executions.slice(0, 10)"
             :key="exec.id"
             class="exec-badge"
             :class="`exec-badge--${exec.type}`"
+            :title="exec.detail || exec.label"
           >
             <Icon :name="execIcon(exec.type)" :size="12" />
             <span class="exec-badge__label">{{ exec.label }}</span>
           </span>
-          <span v-if="message.executions.length > 5" class="exec-badge exec-badge--more">
-            +{{ message.executions.length - 5 }} more
+          <span v-if="message.executions.length > 10" class="exec-badge exec-badge--more">
+            +{{ message.executions.length - 10 }} more
           </span>
         </div>
       </div>

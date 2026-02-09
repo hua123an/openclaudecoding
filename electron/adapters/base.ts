@@ -4,6 +4,12 @@ import type { CliToolInfo } from '../../src/types'
 export interface StreamEventResult {
   text?: string
   sessionId?: string
+  /** 工具调用开始（content_block_start type=tool_use） */
+  toolStart?: { index: number; name: string }
+  /** 工具输入 JSON 增量（content_block_delta type=input_json_delta） */
+  toolInputDelta?: { index: number; json: string }
+  /** 工具调用块结束（content_block_stop） */
+  toolEnd?: { index: number }
 }
 
 export interface BuildCommandOpts {
