@@ -17,7 +17,11 @@ marked.use({
       if (language) {
         highlighted = hljs.highlight(text, { language }).value
       } else {
-        highlighted = hljs.highlightAuto(text).value
+        // 不用 highlightAuto（遍历所有语言极慢），直接 escape 输出
+        highlighted = text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
       }
 
       const langLabel = language || ''

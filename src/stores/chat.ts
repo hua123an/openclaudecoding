@@ -13,6 +13,17 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/** 轻量 HTML 转换：流式期间用，不做代码高亮 */
+function lightHtml(raw: string): string {
+  const cleaned = stripAnsi(raw)
+  return escapeHtml(cleaned)
+    .replace(/\n/g, '<br>')
+}
+
+/** 节流渲染管理器 */
+const renderTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const RENDER_INTERVAL = 150 // ms
+
 export const useChatStore = defineStore('chat', () => {
   const sessionMap = reactive<Map<string, SessionMessages>>(new Map())
 
@@ -97,8 +108,20 @@ export const useChatStore = defineStore('chat', () => {
     if (!msg) return
 
     msg.rawContent += rawChunk
-    msg.htmlContent = renderMarkdown(msg.rawContent)
     msg.updatedAt = Date.now()
+
+    // 立即用轻量渲染更新（无代码高亮，极快）
+    msg.htmlContent = lightHtml(msg.rawContent)
+
+    // 节流：每 150ms 做一次完整 Markdown 渲染
+    if (!renderTimers.has(sessionId)) {
+      renderTimers.set(sessionId, setTimeout(() => {
+        renderTimers.delete(sessionId)
+        if (msg.status === 'streaming') {
+          msg.htmlContent = renderMarkdown(msg.rawContent)
+        }
+      }, RENDER_INTERVAL))
+    }
 
     // 解析执行操作
     if (toolId) {
@@ -111,8 +134,17 @@ export const useChatStore = defineStore('chat', () => {
     const session = sessionMap.get(sessionId)
     if (!session?.streamingMessageId) return
 
+    // 清理节流定时器
+    const timer = renderTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      renderTimers.delete(sessionId)
+    }
+
     const msg = session.messages.find(m => m.id === session.streamingMessageId)
     if (msg) {
+      // 最终完整 Markdown 渲染（含代码高亮）
+      msg.htmlContent = renderMarkdown(msg.rawContent)
       msg.status = 'complete'
       msg.updatedAt = Date.now()
     }
