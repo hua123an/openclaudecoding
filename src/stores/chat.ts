@@ -3,7 +3,7 @@ import { reactive } from 'vue'
 import type { MessageBlock, SessionMessages, ExecutionItem, ExecutionType } from '../types'
 import { ansiToHtml, stripAnsi } from '../services/ansiRenderer'
 import { parseExecutions } from '../services/executionParser'
-import { renderMarkdown } from '../services/markdownRenderer'
+import { renderMarkdown, renderMarkdownFast } from '../services/markdownRenderer'
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -15,7 +15,13 @@ function escapeHtml(str: string): string {
 
 /** 节流渲染管理器 */
 const renderTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const RENDER_INTERVAL = 120 // ms
+/** 根据内容长度自适应节流间隔 */
+function getThrottleInterval(contentLen: number): number {
+  if (contentLen < 2000) return 100
+  if (contentLen < 8000) return 200
+  if (contentLen < 20000) return 350
+  return 500
+}
 
 export const useChatStore = defineStore('chat', () => {
   const sessionMap = reactive<Map<string, SessionMessages>>(new Map())
@@ -103,18 +109,17 @@ export const useChatStore = defineStore('chat', () => {
     msg.rawContent += rawChunk
     msg.updatedAt = Date.now()
 
-    // 节流渲染：无 timer 时立即渲染 + 设冷却期；冷却期内只累积不渲染
+    const interval = getThrottleInterval(msg.rawContent.length)
+
+    // 节流渲染：流式期间用轻量渲染器（无代码高亮），自适应间隔
     if (!renderTimers.has(sessionId)) {
-      // 立即渲染当前累积内容
-      msg.htmlContent = renderMarkdown(msg.rawContent)
-      // 设置冷却期，期间不再渲染
+      msg.htmlContent = renderMarkdownFast(msg.rawContent)
       renderTimers.set(sessionId, setTimeout(() => {
         renderTimers.delete(sessionId)
-        // 冷却结束，渲染冷却期间累积的内容
         if (msg.status === 'streaming') {
-          msg.htmlContent = renderMarkdown(msg.rawContent)
+          msg.htmlContent = renderMarkdownFast(msg.rawContent)
         }
-      }, RENDER_INTERVAL))
+      }, interval))
     }
 
     // 解析执行操作

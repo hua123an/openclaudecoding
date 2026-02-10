@@ -87,10 +87,13 @@ export class GenericAdapter implements CliToolAdapter {
 
   async detect(): Promise<boolean> {
     try {
-      const output = execSync(this.detectCommand, {
+      const shell = process.env.SHELL || '/bin/zsh'
+      // 使用 login shell 确保加载用户 PATH（打包后 Electron 的 PATH 很短）
+      const output = execSync(`${shell} -l -c '${this.detectCommand}'`, {
         encoding: 'utf-8',
-        timeout: 5000,
+        timeout: 8000,
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, HOME: os.homedir() },
       }).trim()
       this._installed = true
       this._version = output
