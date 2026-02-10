@@ -191,9 +191,13 @@ export class GenericAdapter implements CliToolAdapter {
 
     content.push({ type: 'text', text: message })
 
+    // stream-json 输入格式需要 { type: "user", message: { role, content } } 包装
     const inputJson = JSON.stringify({
-      role: 'user',
-      content,
+      type: 'user',
+      message: {
+        role: 'user',
+        content,
+      },
     })
 
     // 写入临时文件

@@ -80,6 +80,8 @@ export interface ExecutionItem {
   type: ExecutionType
   label: string
   detail?: string
+  /** 富内容：用于卡片展开后显示（diff、命令全文、文件内容预览等） */
+  content?: string
   timestamp: number
   status: 'running' | 'success' | 'error'
 }

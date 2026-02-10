@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { MessageBlock } from '../../types'
+import type { MessageBlock, ExecutionItem } from '../../types'
 import AnsiBlock from './AnsiBlock.vue'
 import MarkdownBlock from './MarkdownBlock.vue'
 import Icon from '../common/Icon.vue'
@@ -11,15 +11,35 @@ const props = defineProps<{
   message: MessageBlock
 }>()
 
+const emit = defineEmits<{
+  edit: [text: string]
+  regenerate: [messageId: string]
+}>()
+
 const settingsStore = useSettingsStore()
+
+// ── 复制状态 ──
+const copied = ref(false)
 
 // ── Thinking 折叠状态 ──
 const expandedSet = ref(new Set<number>())
+// ── Tool 活动日志折叠状态 ──
+const toolExpandedSet = ref(new Set<string>())
+// ── 是否展开所有工具（默认折叠，只显示前 COLLAPSED_COUNT 个） ──
+const toolShowAll = ref(false)
+
+const COLLAPSED_COUNT = 3
 
 function toggleThinking(idx: number) {
   const s = expandedSet.value
   if (s.has(idx)) s.delete(idx)
   else s.add(idx)
+}
+
+function toggleTool(id: string) {
+  const s = toolExpandedSet.value
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
 }
 
 interface Segment {
@@ -38,7 +58,6 @@ const segments = computed<Segment[]>(() => {
   }
 
   const parts: Segment[] = []
-  // 同时匹配已关闭和未关闭（流式中）的 thinking 块
   const regex = /<thinking>([\s\S]*?)(?:<\/thinking>|$)/g
   let lastIndex = 0
   let match
@@ -61,6 +80,103 @@ const segments = computed<Segment[]>(() => {
 })
 
 const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking'))
+
+/** streaming 中但尚无实际文本内容 */
+const hasTextContent = computed(() => props.message.rawContent.trim().length > 0)
+const isWorking = computed(() => props.message.status === 'streaming' && !hasTextContent.value)
+
+// ── 操作按钮 ──
+
+async function copyMessage() {
+  await navigator.clipboard.writeText(props.message.rawContent)
+  copied.value = true
+  setTimeout(() => { copied.value = false }, 1500)
+}
+
+function editMessage() {
+  emit('edit', props.message.rawContent)
+}
+
+function regenerateMessage() {
+  emit('regenerate', props.message.id)
+}
+
+// ── 活动日志辅助函数 ──
+
+/** 可见的工具条目（折叠时只显示前 N 个） */
+const visibleExecs = computed(() => {
+  const all = props.message.executions
+  if (toolShowAll.value || all.length <= COLLAPSED_COUNT) return all
+  return all.slice(0, COLLAPSED_COUNT)
+})
+
+const hiddenCount = computed(() => {
+  const all = props.message.executions
+  if (toolShowAll.value || all.length <= COLLAPSED_COUNT) return 0
+  return all.length - COLLAPSED_COUNT
+})
+
+/** 从 label 提取工具名 */
+function toolName(label: string): string {
+  const idx = label.indexOf(':')
+  return idx > 0 ? label.slice(0, idx) : label
+}
+
+/** 工具操作动词（仿 Cursor 风格） */
+function toolAction(exec: ExecutionItem): string {
+  const name = toolName(exec.label)
+  const map: Record<string, string> = {
+    Read: 'Read', Write: 'Created', Edit: 'Edited',
+    Bash: 'Ran', Glob: 'Searched', Grep: 'Searched',
+    WebFetch: 'Fetched', WebSearch: 'Searched',
+    Task: 'Delegated', TodoWrite: 'Updated',
+  }
+  return map[name] || name
+}
+
+/** 工具操作图标 */
+function toolIcon(exec: ExecutionItem): string {
+  const name = toolName(exec.label)
+  const map: Record<string, string> = {
+    Read: 'file-text', Write: 'file-plus', Edit: 'edit-3',
+    Bash: 'terminal', Glob: 'search', Grep: 'search',
+    WebFetch: 'globe', WebSearch: 'search',
+    Task: 'git-branch', TodoWrite: 'check-square',
+  }
+  return map[name] || 'zap'
+}
+
+/** 工具操作颜色类型 */
+function toolColor(exec: ExecutionItem): string {
+  const name = toolName(exec.label)
+  if (['Read', 'Glob', 'Grep'].includes(name)) return 'blue'
+  if (['Edit', 'Write'].includes(name)) return 'green'
+  if (['Bash'].includes(name)) return 'yellow'
+  if (['WebFetch', 'WebSearch'].includes(name)) return 'purple'
+  return 'gray'
+}
+
+/** 工具操作的文件名/描述 */
+function toolDetail(exec: ExecutionItem): string {
+  const idx = exec.label.indexOf(':')
+  return idx > 0 ? exec.label.slice(idx + 1).trim() : ''
+}
+
+/** 工具右侧的元数据（diff 统计等） */
+function toolMeta(exec: ExecutionItem): string {
+  const name = toolName(exec.label)
+  if (name === 'Edit' && exec.content) {
+    const adds = (exec.content.match(/^\+(?!\+\+)/gm) || []).length
+    const dels = (exec.content.match(/^-(?!--)/gm) || []).length
+    if (adds || dels) return `+${adds} -${dels}`
+  }
+  return ''
+}
+
+/** 判断 content 是否有 diff */
+function hasDiff(exec: ExecutionItem): boolean {
+  return !!exec.content && (exec.content.includes('--- old') || exec.content.includes('+++ new'))
+}
 </script>
 
 <template>
@@ -74,15 +190,17 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
     <!-- 用户消息 -->
     <template v-if="message.role === 'user'">
       <div class="message-card__bubble message-card__bubble--user">
-        <div class="message-card__header">
-          <span class="message-card__avatar message-card__avatar--user">
-            <Icon name="edit" :size="12" />
-          </span>
-          <span class="message-card__role">You</span>
-          <span class="message-card__time">{{ formatTime(message.createdAt) }}</span>
-        </div>
+        <span class="message-card__time-float">{{ formatTime(message.createdAt) }}</span>
         <div class="message-card__body message-card__body--user">
           {{ message.rawContent }}
+        </div>
+        <div class="message-card__actions">
+          <button class="message-card__action-btn" title="编辑" @click="editMessage">
+            <Icon name="edit-2" :size="13" />
+          </button>
+          <button class="message-card__action-btn" title="复制" @click="copyMessage">
+            <Icon :name="copied ? 'check' : 'copy'" :size="13" />
+          </button>
         </div>
       </div>
     </template>
@@ -101,18 +219,21 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
     <!-- AI 助手消息 -->
     <template v-else>
       <div class="message-card__bubble message-card__bubble--assistant">
-        <div class="message-card__header">
-          <span class="message-card__avatar message-card__avatar--ai">
-            <Icon name="zap" :size="12" />
-          </span>
-          <span class="message-card__role">AI</span>
-          <span class="message-card__time">{{ formatTime(message.createdAt) }}</span>
+        <span class="message-card__time-float">{{ formatTime(message.createdAt) }}</span>
+
+        <!-- Working 状态 -->
+        <div v-if="isWorking" class="message-card__working">
+          <div class="working-dots">
+            <span class="working-dots__dot"></span>
+            <span class="working-dots__dot"></span>
+            <span class="working-dots__dot"></span>
+          </div>
+          <span class="working-dots__text">Working</span>
         </div>
 
         <!-- 有 thinking 块：分段渲染 -->
-        <template v-if="hasThinking">
+        <template v-else-if="hasThinking">
           <template v-for="(seg, idx) in segments" :key="idx">
-            <!-- Thinking 可折叠卡片 -->
             <div v-if="seg.type === 'thinking'" class="thinking-card" :class="{ 'thinking-card--open': expandedSet.has(idx) || settingsStore.thinkingMode }">
               <div class="thinking-card__header" @click="toggleThinking(idx)">
                 <Icon name="loader" :size="13" class="thinking-card__icon" />
@@ -127,7 +248,6 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
                 </div>
               </transition>
             </div>
-            <!-- 正文内容 -->
             <div v-else class="message-card__body message-card__body--assistant">
               <MarkdownBlock :html="seg.html" />
             </div>
@@ -145,26 +265,63 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
           </div>
         </template>
 
-        <!-- streaming shimmer bar -->
-        <div v-if="message.status === 'streaming'" class="message-card__shimmer-wrap">
-          <div class="message-card__shimmer-bar"></div>
+        <!-- 紧凑活动日志 -->
+        <div v-if="message.executions.length > 0" class="activity-log">
+          <div
+            v-for="exec in visibleExecs"
+            :key="exec.id"
+            class="activity-item"
+            :class="{ 'activity-item--open': toolExpandedSet.has(exec.id) }"
+          >
+            <div class="activity-item__row" @click="exec.content ? toggleTool(exec.id) : undefined">
+              <Icon :name="toolIcon(exec)" :size="12" class="activity-item__icon" :class="`activity-item__icon--${toolColor(exec)}`" />
+              <span class="activity-item__action">{{ toolAction(exec) }}</span>
+              <span class="activity-item__detail">{{ toolDetail(exec) }}</span>
+              <span v-if="toolMeta(exec)" class="activity-item__meta">{{ toolMeta(exec) }}</span>
+              <span v-if="exec.content" class="activity-item__chevron">
+                <Icon :name="toolExpandedSet.has(exec.id) ? 'chevron-down' : 'chevron-right'" :size="11" />
+              </span>
+            </div>
+            <!-- 展开内容 -->
+            <transition name="tool-expand">
+              <div v-if="toolExpandedSet.has(exec.id) && exec.content" class="activity-item__body">
+                <template v-if="hasDiff(exec)">
+                  <div class="activity-item__diff">
+                    <div
+                      v-for="(line, li) in exec.content.split('\n')"
+                      :key="li"
+                      class="activity-item__diff-line"
+                      :class="{
+                        'activity-item__diff-line--path': li === 0 && !line.startsWith('-') && !line.startsWith('+'),
+                        'activity-item__diff-line--old': line.startsWith('--- old'),
+                        'activity-item__diff-line--new': line.startsWith('+++ new'),
+                        'activity-item__diff-line--del': line.startsWith('-') && !line.startsWith('--- old') && li > 0,
+                        'activity-item__diff-line--add': line.startsWith('+') && !line.startsWith('+++ new') && li > 0,
+                      }"
+                    >{{ line }}</div>
+                  </div>
+                </template>
+                <template v-else>
+                  <pre class="activity-item__pre">{{ exec.content }}</pre>
+                </template>
+              </div>
+            </transition>
+          </div>
+          <!-- 展开更多 -->
+          <button v-if="hiddenCount > 0" class="activity-log__toggle" @click="toolShowAll = !toolShowAll">
+            <Icon :name="toolShowAll ? 'chevron-up' : 'chevron-down'" :size="11" />
+            {{ toolShowAll ? 'Show less' : `Show ${hiddenCount} more` }}
+          </button>
         </div>
 
-        <!-- 执行操作标记 -->
-        <div v-if="message.executions.length > 0" class="message-card__executions">
-          <span
-            v-for="exec in message.executions.slice(0, 10)"
-            :key="exec.id"
-            class="exec-badge"
-            :class="`exec-badge--${exec.type}`"
-            :title="exec.detail || exec.label"
-          >
-            <Icon :name="execIcon(exec.type)" :size="12" />
-            <span class="exec-badge__label">{{ exec.label }}</span>
-          </span>
-          <span v-if="message.executions.length > 10" class="exec-badge exec-badge--more">
-            +{{ message.executions.length - 10 }} more
-          </span>
+        <!-- 操作按钮行 -->
+        <div v-if="message.status === 'complete'" class="message-card__actions">
+          <button class="message-card__action-btn" title="复制" @click="copyMessage">
+            <Icon :name="copied ? 'check' : 'copy'" :size="13" />
+          </button>
+          <button class="message-card__action-btn" title="重新生成" @click="regenerateMessage">
+            <Icon name="refresh-cw" :size="13" />
+          </button>
         </div>
       </div>
     </template>
@@ -175,15 +332,6 @@ const hasThinking = computed(() => segments.value.some(s => s.type === 'thinking
 function formatTime(ts: number): string {
   const d = new Date(ts)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-function execIcon(type: string): string {
-  const icons: Record<string, string> = {
-    file_read: 'file', file_write: 'edit', file_edit: 'edit', file_delete: 'trash',
-    tool_use: 'wrench', tool_result: 'check',
-    command_run: 'terminal', command_output: 'file',
-  }
-  return icons[type] || 'zap'
 }
 </script>
 
@@ -203,7 +351,7 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   font-size: 13px;
 }
 
-// ── 用户消息：右对齐渐变气泡 ──
+// ── 用户消息 ──
 .message-card--user {
   display: flex;
   justify-content: flex-end;
@@ -217,23 +365,10 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   border-radius: $radius-lg $radius-lg $radius-sm $radius-lg;
   padding: 0;
   overflow: hidden;
+  position: relative;
 
-  .message-card__header {
-    padding: 10px 14px 0;
-  }
-
-  .message-card__role {
-    color: var(--neu-text-secondary);
-  }
-
-  .message-card__time {
-    color: var(--neu-text-muted);
-  }
-
-  .message-card__avatar--user {
-    background: rgba(0, 0, 0, 0.06);
-    color: var(--neu-text-secondary);
-    box-shadow: none;
+  &:hover {
+    .message-card__time-float { opacity: 1; }
   }
 }
 
@@ -242,11 +377,12 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   font-family: $font-sans;
   white-space: pre-wrap;
   word-break: break-word;
-  padding: 8px 14px 12px;
+  padding: 10px 14px;
   line-height: 1.6;
+  user-select: text;
 }
 
-// ── AI 消息：左对齐 ──
+// ── AI 消息 ──
 .message-card--assistant {
   display: flex;
   justify-content: flex-start;
@@ -258,9 +394,10 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   border: 1px solid var(--glass-border, var(--neu-border));
   border-radius: $radius-sm $radius-lg $radius-lg $radius-lg;
   overflow: hidden;
+  position: relative;
 
-  .message-card__header {
-    padding: 10px 14px 0;
+  &:hover {
+    .message-card__time-float { opacity: 1; }
   }
 }
 
@@ -269,7 +406,8 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   font-family: $font-mono;
   font-size: 13px;
   line-height: 1.7;
-  padding: 8px 14px 12px;
+  padding: 10px 14px;
+  user-select: text;
 
   :deep(pre),
   :deep(code) {
@@ -277,7 +415,48 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 }
 
-// ── 系统消息：居中 + divider ──
+// ── 浮动时间戳 ──
+.message-card__time-float {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 10px;
+  color: var(--neu-text-muted);
+  opacity: 0;
+  transition: opacity $duration-fast $ease-out;
+  pointer-events: none;
+  z-index: 1;
+}
+
+// ── 操作按钮行 ──
+.message-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px 6px;
+}
+
+.message-card__action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  color: var(--neu-text-muted);
+  cursor: pointer;
+  transition: all $duration-fast $ease-out;
+  padding: 0;
+
+  &:hover {
+    color: var(--neu-accent);
+    background: var(--glass-bg-hover, var(--neu-bg-hover));
+  }
+}
+
+// ── 系统消息 ──
 .message-card--system {
   display: flex;
   justify-content: center;
@@ -305,45 +484,6 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   text-align: center;
 }
 
-// ── 通用 header ──
-.message-card__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.message-card__avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: $radius-full;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.message-card__avatar--user {
-  background: var(--neu-accent);
-  color: white;
-}
-
-.message-card__avatar--ai {
-  background: var(--neu-bg-hover);
-  color: var(--neu-text-secondary);
-}
-
-.message-card__role {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--neu-text-secondary);
-}
-
-.message-card__time {
-  font-size: 11px;
-  color: var(--neu-text-muted);
-  margin-left: auto;
-}
-
 // ── 光标 ──
 .message-card__cursor {
   display: inline-block;
@@ -357,50 +497,76 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   50% { opacity: 0; }
 }
 
-// ── Streaming shimmer bar ──
-.message-card__shimmer-wrap {
-  padding: 0 14px 10px;
-}
-
-.message-card__shimmer-bar {
-  width: 120px;
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--neu-accent) 40%,
-    var(--neu-accent) 60%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-// ── 执行操作标记 pill（内凹效果）──
-.message-card__executions {
+// ── Working 状态 ──
+.message-card__working {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 14px 10px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
 }
 
-.exec-badge {
-  display: inline-flex;
+.working-dots {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: $radius-full;
-  font-size: 11px;
-  color: var(--neu-text-secondary);
-  background: var(--glass-bg-surface, var(--neu-bg));
-  border: 1px solid var(--glass-border, var(--neu-border));
-  max-width: 220px;
+  gap: 4px;
+}
+
+.working-dots__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--neu-accent);
+  opacity: 0.4;
+  animation: dotBounce 1.4s ease-in-out infinite;
+
+  &:nth-child(2) { animation-delay: 0.16s; }
+  &:nth-child(3) { animation-delay: 0.32s; }
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.working-dots__text {
+  font-size: 12px;
+  color: var(--neu-text-muted);
+  font-style: italic;
+}
+
+// ══════════════════════════════════════════════════
+// ── 紧凑活动日志（仿 Cursor 风格） ──
+// ══════════════════════════════════════════════════
+
+.activity-log {
+  padding: 4px 10px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-item {
+  border-radius: 4px;
+  overflow: hidden;
+
+  & + & {
+    border-top: 1px solid var(--glass-border, var(--neu-border));
+  }
+}
+
+.activity-item__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  min-height: 26px;
+  cursor: pointer;
+  user-select: none;
   transition: background $duration-fast $ease-out;
 
   &:hover {
@@ -408,32 +574,152 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 }
 
-.exec-badge__label {
+.activity-item__icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+
+  &--blue { color: var(--neu-accent, #5b8def); }
+  &--green { color: var(--neu-success, #43a047); }
+  &--yellow { color: var(--neu-warning, #f9a825); }
+  &--purple { color: #9c6ade; }
+  &--gray { color: var(--neu-text-muted); }
+}
+
+.activity-item__action {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neu-text-secondary);
+  flex-shrink: 0;
+}
+
+.activity-item__detail {
+  font-size: 11px;
+  color: var(--neu-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.exec-badge--file_read,
-.exec-badge--file_write,
-.exec-badge--file_edit,
-.exec-badge--file_delete {
-  color: var(--neu-accent);
-}
-
-.exec-badge--tool_use,
-.exec-badge--tool_result {
-  color: var(--neu-warning);
-}
-
-.exec-badge--command_run,
-.exec-badge--command_output {
-  color: var(--neu-success);
-}
-
-.exec-badge--more {
+.activity-item__meta {
+  font-size: 10px;
+  font-family: $font-mono;
   color: var(--neu-text-muted);
-  font-style: italic;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.activity-item__chevron {
+  color: var(--neu-text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+// ── 展开内容 ──
+.activity-item__body {
+  border-top: 1px solid var(--glass-border, var(--neu-border));
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--glass-bg-surface, var(--neu-bg));
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--neu-scrollbar, var(--neu-bg-active));
+    border-radius: 2px;
+  }
+}
+
+.activity-item__pre {
+  margin: 0;
+  padding: 6px 10px;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--neu-text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+// diff 视图
+.activity-item__diff {
+  padding: 2px 0;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.activity-item__diff-line {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  &--path {
+    color: var(--neu-text-secondary);
+    font-weight: 600;
+    padding-bottom: 2px;
+  }
+
+  &--old {
+    color: var(--neu-error, #e53935);
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  &--new {
+    color: var(--neu-success, #43a047);
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  &--del {
+    color: var(--neu-error, #e53935);
+    background: rgba(229, 57, 53, 0.06);
+  }
+
+  &--add {
+    color: var(--neu-success, #43a047);
+    background: rgba(67, 160, 71, 0.06);
+  }
+}
+
+// ── "Show N more" 按钮 ──
+.activity-log__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--neu-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color $duration-fast $ease-out;
+
+  &:hover {
+    color: var(--neu-accent);
+  }
+}
+
+// ── 展开动画 ──
+.tool-expand-enter-active {
+  transition: all $duration-normal $ease-out;
+}
+
+.tool-expand-leave-active {
+  transition: all $duration-fast $ease-out;
+}
+
+.tool-expand-enter-from,
+.tool-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
 }
 
 // ── Thinking 折叠卡片 ──
@@ -517,7 +803,7 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   padding-bottom: 0;
 }
 
-// ── streaming 状态下整体样式 ──
+// ── streaming 状态 ──
 .message-card--streaming {
   .message-card__bubble--assistant {
     border-color: rgba(var(--neu-accent-rgb), 0.15);

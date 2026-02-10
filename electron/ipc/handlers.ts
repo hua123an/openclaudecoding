@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -193,6 +193,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:save', (_event, state: any) => {
     workspaceManager.save(state)
+    return { success: true }
+  })
+
+  // ===== Shell（外部链接） =====
+  ipcMain.handle('shell:open-external', async (_event, url: string) => {
+    await shell.openExternal(url)
     return { success: true }
   })
 

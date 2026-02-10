@@ -20,7 +20,7 @@ export interface MessageRunnerOpts {
   tempFile?: string
   onData: (data: string) => void
   onSessionId?: (sessionId: string) => void
-  onToolUse?: (toolUse: { name: string; input?: string }) => void
+  onToolUse?: (toolUse: { name: string; input?: string; content?: string }) => void
   onDone: (code: number) => void
   onError: (error: string) => void
 }
@@ -129,12 +129,10 @@ export class MessageRunner {
           const block = blocks?.get(event.toolEnd.index)
           if (block) {
             blocks!.delete(event.toolEnd.index)
-            // 格式化为文本，注入消息流（像终端一样直接显示）
-            const formatted = this.formatToolUse(block.name, block.inputJson)
-            opts.onData(formatted)
-            // 同时发送结构化信息给 badges
+            // 只通过工具卡片展示，不再注入 ⏺ 文本标记到消息流
             const detail = this.extractToolDetail(block.name, block.inputJson)
-            opts.onToolUse?.({ name: block.name, input: detail })
+            const content = this.extractToolContent(block.name, block.inputJson)
+            opts.onToolUse?.({ name: block.name, input: detail, content })
           }
         }
       }
@@ -190,61 +188,6 @@ export class MessageRunner {
     })
   }
 
-  /** 格式化工具调用为纯文本（不使用任何 markdown 语法，避免与流式渲染冲突） */
-  private formatToolUse(toolName: string, inputJson: string): string {
-    if (!inputJson) return `\n\n⏺ ${toolName}\n\n`
-    try {
-      const input = JSON.parse(inputJson)
-      // 根据工具类型提取最关键的参数，仿照 Claude Code 终端显示
-      let detail = ''
-      switch (toolName) {
-        case 'Read':
-          detail = input.file_path || ''
-          break
-        case 'Write':
-          detail = input.file_path || ''
-          break
-        case 'Edit':
-          detail = input.file_path || ''
-          break
-        case 'Bash': {
-          const cmd = (input.command || '').replace(/\n/g, ' ')
-          detail = cmd.length > 150 ? cmd.slice(0, 150) + '...' : cmd
-          break
-        }
-        case 'Glob':
-          detail = input.pattern || ''
-          break
-        case 'Grep':
-          detail = input.pattern || ''
-          break
-        case 'WebFetch':
-          detail = input.url ? input.url.slice(0, 100) : ''
-          break
-        case 'WebSearch':
-          detail = input.query || ''
-          break
-        case 'Task':
-          detail = input.description || ''
-          break
-        default:
-          // 取第一个短字符串值
-          for (const val of Object.values(input)) {
-            if (typeof val === 'string' && val.length > 0 && val.length < 150) {
-              detail = val
-              break
-            }
-          }
-      }
-      if (detail) {
-        return `\n\n⏺ ${toolName}: ${detail}\n\n`
-      }
-      return `\n\n⏺ ${toolName}\n\n`
-    } catch {
-      return `\n\n⏺ ${toolName}\n\n`
-    }
-  }
-
   /** 从工具输入 JSON 中提取关键信息作为显示标签 */
   private extractToolDetail(toolName: string, inputJson: string): string {
     if (!inputJson) return ''
@@ -286,6 +229,72 @@ export class MessageRunner {
             }
           }
           return ''
+      }
+    } catch {
+      return ''
+    }
+  }
+
+  /** 提取工具卡片展开后的富内容 */
+  private extractToolContent(toolName: string, inputJson: string): string {
+    if (!inputJson) return ''
+    try {
+      const input = JSON.parse(inputJson)
+      switch (toolName) {
+        case 'Edit': {
+          const lines: string[] = []
+          if (input.file_path) lines.push(input.file_path)
+          if (input.old_string) {
+            lines.push('--- old')
+            const old = input.old_string.length > 500 ? input.old_string.slice(0, 500) + '...' : input.old_string
+            lines.push(old)
+          }
+          if (input.new_string) {
+            lines.push('+++ new')
+            const ns = input.new_string.length > 500 ? input.new_string.slice(0, 500) + '...' : input.new_string
+            lines.push(ns)
+          }
+          return lines.join('\n')
+        }
+        case 'Write': {
+          const lines: string[] = []
+          if (input.file_path) lines.push(input.file_path)
+          if (input.content) {
+            const preview = input.content.length > 600 ? input.content.slice(0, 600) + '\n...' : input.content
+            lines.push(preview)
+          }
+          return lines.join('\n')
+        }
+        case 'Read': {
+          return input.file_path || ''
+        }
+        case 'Bash': {
+          return input.command || ''
+        }
+        case 'Glob': {
+          const lines: string[] = []
+          if (input.pattern) lines.push(`pattern: ${input.pattern}`)
+          if (input.path) lines.push(`path: ${input.path}`)
+          return lines.join('\n')
+        }
+        case 'Grep': {
+          const lines: string[] = []
+          if (input.pattern) lines.push(`pattern: ${input.pattern}`)
+          if (input.path) lines.push(`path: ${input.path}`)
+          if (input.glob) lines.push(`glob: ${input.glob}`)
+          return lines.join('\n')
+        }
+        case 'WebFetch':
+          return input.url || ''
+        case 'WebSearch':
+          return input.query || ''
+        case 'Task':
+          return input.description || input.prompt || ''
+        default: {
+          // 通用：序列化前 500 字符
+          const str = JSON.stringify(input, null, 2)
+          return str.length > 500 ? str.slice(0, 500) + '...' : str
+        }
       }
     } catch {
       return ''

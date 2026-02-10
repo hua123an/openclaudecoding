@@ -140,13 +140,43 @@ async function handleCancel() {
   chatStore.finalizeStreaming(props.sessionId)
 }
 
+/** 重新生成：删除 AI 回复，重新发送上一条用户消息 */
+async function handleRegenerate(assistantMessageId: string) {
+  const lastUserMsg = chatStore.getLastUserMessageBefore(props.sessionId, assistantMessageId)
+  if (!lastUserMsg) return
+
+  // 先取消正在进行的流式
+  await handleCancel()
+
+  // 删除该 AI 消息
+  chatStore.removeMessage(props.sessionId, assistantMessageId)
+
+  // 重新发送
+  const session = getSession()
+  if (!session) return
+
+  messageCount.value++
+
+  await window.electronAPI.messageSend({
+    sessionId: props.sessionId,
+    toolId: session.toolId,
+    projectDir: session.projectPath,
+    message: lastUserMsg.rawContent,
+    isFirst: false,
+    cliSessionId: session.cliSessionId,
+    model: settingsStore.getSelectedModel(session.toolId) || undefined,
+  })
+
+  chatStore.startAssistantMessage(props.sessionId)
+}
+
 defineExpose({ toggleExecPanel, showExecPanel })
 </script>
 
 <template>
   <div class="session-view">
     <div class="session-view__main">
-      <ChatView :session-id="sessionId" :tool-id="getSession()?.toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="handleCancel" />
+      <ChatView :session-id="sessionId" :tool-id="getSession()?.toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="handleCancel" @regenerate="handleRegenerate" />
     </div>
     <transition name="slide-panel">
       <ExecutionPanel
@@ -174,6 +204,7 @@ defineExpose({ toggleExecPanel, showExecPanel })
 .session-view__main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

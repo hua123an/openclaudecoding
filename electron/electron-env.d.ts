@@ -46,6 +46,9 @@ interface ElectronAPI {
   openImageDialog(): Promise<string[]>;
   saveClipboardImage(base64: string, mimeType: string): Promise<string>;
 
+  // Shell（外部链接）
+  openExternal(url: string): Promise<{ success: boolean }>;
+
   // PTY（保留）
   ptyCreate(
     opts: import("../src/types").PtyCreateOptions,

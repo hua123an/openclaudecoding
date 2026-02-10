@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import Icon from '../common/Icon.vue'
 import { useSettingsStore } from '../../stores/settings'
 import type { SkillItem } from '../../types'
@@ -200,7 +200,21 @@ function focus() {
   inputRef.value?.focus()
 }
 
-defineExpose({ focus })
+function setInputText(text: string) {
+  inputText.value = text
+  // 重新计算高度
+  if (inputRef.value) {
+    inputRef.value.style.height = 'auto'
+    nextTick(() => {
+      if (inputRef.value) {
+        inputRef.value.style.height = Math.min(inputRef.value.scrollHeight, 160) + 'px'
+      }
+    })
+  }
+  focus()
+}
+
+defineExpose({ focus, setInputText })
 </script>
 
 <template>

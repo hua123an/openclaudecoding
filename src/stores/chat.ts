@@ -151,7 +151,7 @@ export const useChatStore = defineStore('chat', () => {
     session.isWaitingResponse = false
   }
 
-  function addToolUse(sessionId: string, toolUse: { name: string; input?: string }): void {
+  function addToolUse(sessionId: string, toolUse: { name: string; input?: string; content?: string }): void {
     const session = sessionMap.get(sessionId)
     if (!session?.streamingMessageId) return
     const msg = session.messages.find(m => m.id === session.streamingMessageId)
@@ -174,6 +174,7 @@ export const useChatStore = defineStore('chat', () => {
       type: execType,
       label,
       detail: toolUse.input,
+      content: toolUse.content,
       timestamp: Date.now(),
       status: 'success',
     })
@@ -199,6 +200,26 @@ export const useChatStore = defineStore('chat', () => {
 
   function clearSession(sessionId: string): void {
     sessionMap.delete(sessionId)
+  }
+
+  /** 删除指定消息 */
+  function removeMessage(sessionId: string, messageId: string): void {
+    const session = sessionMap.get(sessionId)
+    if (!session) return
+    const idx = session.messages.findIndex(m => m.id === messageId)
+    if (idx !== -1) session.messages.splice(idx, 1)
+  }
+
+  /** 获取某条 AI 消息前的最后一条用户消息 */
+  function getLastUserMessageBefore(sessionId: string, assistantMessageId: string): MessageBlock | null {
+    const session = sessionMap.get(sessionId)
+    if (!session) return null
+    const idx = session.messages.findIndex(m => m.id === assistantMessageId)
+    if (idx === -1) return null
+    for (let i = idx - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'user') return session.messages[i]
+    }
+    return null
   }
 
   /** 加载历史消息（从 CLI 工具的 session 文件） */
@@ -237,6 +258,8 @@ export const useChatStore = defineStore('chat', () => {
     getToolCalls,
     getCommands,
     clearSession,
+    removeMessage,
+    getLastUserMessageBefore,
     loadHistoryMessages,
   }
 })

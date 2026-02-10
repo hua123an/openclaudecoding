@@ -12,6 +12,7 @@ defineProps<{
 const emit = defineEmits<{
   send: [text: string, imagePaths: string[], model?: string, thinking?: boolean]
   cancel: []
+  regenerate: [messageId: string]
 }>()
 
 const chatInputRef = ref<InstanceType<typeof ChatInput>>()
@@ -19,11 +20,19 @@ const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 function handleSend(text: string, imagePaths: string[], model?: string, thinking?: boolean) {
   emit('send', text, imagePaths, model, thinking)
 }
+
+function handleEdit(text: string) {
+  chatInputRef.value?.setInputText(text)
+}
+
+function handleRegenerate(messageId: string) {
+  emit('regenerate', messageId)
+}
 </script>
 
 <template>
   <div class="chat-view">
-    <MessageList :session-id="sessionId" />
+    <MessageList :session-id="sessionId" @edit="handleEdit" @regenerate="handleRegenerate" />
     <ChatInput ref="chatInputRef" :tool-id="toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="emit('cancel')" />
   </div>
 </template>
@@ -34,5 +43,7 @@ function handleSend(text: string, imagePaths: string[], model?: string, thinking
   flex-direction: column;
   height: 100%;
   width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>
