@@ -65,6 +65,12 @@ export function registerIpcHandlers(): void {
       thinking: opts.thinking,
     })
     const win = BrowserWindow.fromWebContents(event.sender)
+    /** 安全发送 IPC（窗口可能已销毁） */
+    const safeSend = (channel: string, data: any) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(channel, data)
+      }
+    }
 
     console.log('[message:send]', opts.isFirst ? 'first' : 'continue',
       'cliSessionId:', opts.cliSessionId || '(none)',
@@ -80,19 +86,19 @@ export function registerIpcHandlers(): void {
         : undefined,
       tempFile: result.tempFile,
       onData: (data) => {
-        win?.webContents.send(`message:data:${opts.sessionId}`, data)
+        safeSend(`message:data:${opts.sessionId}`, data)
       },
       onSessionId: (sessionId) => {
-        win?.webContents.send(`message:sessionId:${opts.sessionId}`, sessionId)
+        safeSend(`message:sessionId:${opts.sessionId}`, sessionId)
       },
       onToolUse: (toolUse) => {
-        win?.webContents.send(`message:tool-use:${opts.sessionId}`, toolUse)
+        safeSend(`message:tool-use:${opts.sessionId}`, toolUse)
       },
       onDone: (code) => {
-        win?.webContents.send(`message:done:${opts.sessionId}`, code)
+        safeSend(`message:done:${opts.sessionId}`, code)
       },
       onError: (error) => {
-        win?.webContents.send(`message:error:${opts.sessionId}`, error)
+        safeSend(`message:error:${opts.sessionId}`, error)
       },
     })
 

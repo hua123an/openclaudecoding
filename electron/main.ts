@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { registerIpcHandlers } from './ipc/handlers'
 import { ptyManager } from './pty/ptyManager'
+import { messageRunner } from './services/messageRunner'
 
 // 注册自定义协议（必须在 app.whenReady 之前）
 protocol.registerSchemesAsPrivileged([
@@ -62,6 +63,7 @@ function createWindow() {
 registerIpcHandlers()
 
 app.on('window-all-closed', () => {
+  messageRunner.destroyAll()
   ptyManager.destroyAll()
   if (process.platform !== 'darwin') {
     app.quit()
