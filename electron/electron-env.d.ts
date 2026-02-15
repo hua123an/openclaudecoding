@@ -41,6 +41,10 @@ interface ElectronAPI {
     sessionId: string,
     callback: (toolUse: { name: string; input?: string }) => void,
   ): () => void;
+  onMessageUsage(
+    sessionId: string,
+    callback: (usage: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number }) => void,
+  ): () => void;
 
   // Image Dialog
   openImageDialog(): Promise<string[]>;
@@ -83,6 +87,13 @@ interface ElectronAPI {
     toolId: string,
   ): Promise<import("../src/types").ToolDetectResult | null>;
 
+  // File System（自定义文件浏览器）
+  fsReadDir(dirPath: string): Promise<
+    { name: string; path: string; isDirectory: boolean; size: number; mtime: number }[]
+    | { error: string }
+  >;
+  fsHomeDir(): Promise<string>;
+
   // Project
   projectOpenDialog(): Promise<string | null>;
   projectRecent(): Promise<import("../src/types").ProjectInfo[]>;
@@ -97,6 +108,22 @@ interface ElectronAPI {
   workspaceSave(state: {
     workspaces: import("../src/types").Workspace[];
     activeSessionId: string | null;
+  }): Promise<{ success: boolean }>;
+
+  // Settings Persistence
+  settingsLoad(): Promise<{
+    theme: 'dark' | 'light';
+    fontSize: number;
+    fontFamily: string;
+    selectedModels: Record<string, string>;
+    thinkingMode: boolean;
+  }>;
+  settingsSave(state: {
+    theme: 'dark' | 'light';
+    fontSize: number;
+    fontFamily: string;
+    selectedModels: Record<string, string>;
+    thinkingMode: boolean;
   }): Promise<{ success: boolean }>;
 
   // Claude Settings

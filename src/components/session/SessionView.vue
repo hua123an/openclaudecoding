@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import ChatView from '../chat/ChatView.vue'
 import ExecutionPanel from '../execution/ExecutionPanel.vue'
 import { useChatStore } from '../../stores/chat'
@@ -13,6 +13,7 @@ const props = defineProps<{
 const chatStore = useChatStore()
 const sessionStore = useSessionStore()
 const settingsStore = useSettingsStore()
+const chatViewRef = ref<InstanceType<typeof ChatView>>()
 const showExecPanel = ref(false)
 const messageCount = ref(0)
 
@@ -23,6 +24,7 @@ let cleanupSessionId: (() => void) | null = null
 let cleanupDone: (() => void) | null = null
 let cleanupError: (() => void) | null = null
 let cleanupToolUse: (() => void) | null = null
+let cleanupUsage: (() => void) | null = null
 
 function getSession() {
   return sessionStore.workspaces
@@ -88,6 +90,11 @@ onMounted(async () => {
   cleanupToolUse = window.electronAPI.onMessageToolUse(props.sessionId, (toolUse) => {
     chatStore.addToolUse(props.sessionId, toolUse)
   })
+
+  // 监听 token 用量
+  cleanupUsage = window.electronAPI.onMessageUsage(props.sessionId, (usage) => {
+    chatStore.updateUsage(props.sessionId, usage)
+  })
 })
 
 onBeforeUnmount(() => {
@@ -96,9 +103,23 @@ onBeforeUnmount(() => {
   cleanupDone?.()
   cleanupError?.()
   cleanupToolUse?.()
+  cleanupUsage?.()
   // 注意：不再自动 cancel —— 切换 session 时只是移除 listener，进程仍然在后台运行
   // 只有用户主动关闭 session 时才会调用 removeSession → messageCancel
 })
+
+// ── 切换会话或新建会话时，自动聚焦输入框 ──
+watch(
+  () => sessionStore.activeSessionId,
+  (newId) => {
+    if (newId === props.sessionId) {
+      nextTick(() => {
+        chatViewRef.value?.focusInput()
+      })
+    }
+  },
+  { immediate: true }
+)
 
 /** 用户发送消息 */
 async function handleSend(text: string, imagePaths: string[], model?: string, thinking?: boolean) {
@@ -176,7 +197,7 @@ defineExpose({ toggleExecPanel, showExecPanel })
 <template>
   <div class="session-view">
     <div class="session-view__main">
-      <ChatView :session-id="sessionId" :tool-id="getSession()?.toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="handleCancel" @regenerate="handleRegenerate" />
+      <ChatView ref="chatViewRef" :session-id="sessionId" :tool-id="getSession()?.toolId" :is-streaming="isStreaming" @send="handleSend" @cancel="handleCancel" @regenerate="handleRegenerate" />
     </div>
     <transition name="slide-panel">
       <ExecutionPanel
@@ -193,10 +214,9 @@ defineExpose({ toggleExecPanel, showExecPanel })
 @use '../../styles/variables' as *;
 
 .session-view {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   display: flex;
-  position: relative;
   background: var(--glass-bg, var(--neu-bg));
   overflow: hidden;
 }

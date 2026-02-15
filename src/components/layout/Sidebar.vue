@@ -2,28 +2,41 @@
 import { ref, onMounted } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useProjectStore } from '../../stores/project'
+import { useChatStore } from '../../stores/chat'
 import { useRouter } from 'vue-router'
 import Icon from '../common/Icon.vue'
+import FileBrowser from '../common/FileBrowser.vue'
 
 const store = useSessionStore()
 const projectStore = useProjectStore()
+const chatStore = useChatStore()
 const router = useRouter()
 
 // 新建会话：选择工具的下拉
 const showToolPicker = ref(false)
 const toolPickerForPath = ref<string | null>(null) // 给哪个 workspace 创建会话
+const showFileBrowser = ref(false)
 
 onMounted(async () => {
   await projectStore.loadRecent()
 })
 
 /** 顶部 "+ Start conversation" */
-async function handleStartConversation() {
-  const dir = await projectStore.openDialog()
-  if (!dir) return
-  // 弹出工具选择
+function handleStartConversation() {
+  showFileBrowser.value = true
+}
+
+/** 文件浏览器选择目录后 */
+function handleFileSelect(dir: string) {
+  showFileBrowser.value = false
+  projectStore.setCurrentAndAddRecent(dir)
   toolPickerForPath.value = dir
   showToolPicker.value = true
+}
+
+/** 文件浏览器取消 */
+function handleFileBrowserCancel() {
+  showFileBrowser.value = false
 }
 
 /** workspace 行的 "+" 按钮 */
@@ -46,17 +59,27 @@ async function handlePickTool(toolId: string) {
   // 如果没有任何历史 session，创建一个新的
   const ws = store.workspaces.find(w => w.path === path)
   if (!ws || ws.sessions.length === 0) {
-    store.createSession(toolId, path)
+    const newSession = store.createSession(toolId, path)
+    router.push(`/session/${newSession.id}`)
   } else {
     // 激活最新的 session
     const latest = ws.sessions[ws.sessions.length - 1]
-    store.setActive(latest.id)
+    router.push(`/session/${latest.id}`)
   }
 }
 
 function closeToolPicker() {
   showToolPicker.value = false
   toolPickerForPath.value = null
+}
+
+/** 导航到插件/设置页面时，先清除活跃会话，使 router-view 可见 */
+function goToPlugins() {
+  router.push('/plugins')
+}
+
+function goToSettings() {
+  router.push('/settings')
 }
 </script>
 
@@ -109,9 +132,10 @@ function closeToolPicker() {
               :key="session.id"
               class="session-item"
               :class="{ 'session-item--active': session.id === store.activeSessionId }"
-              @click="store.setActive(session.id)"
+              @click="router.push(`/session/${session.id}`)"
             >
-              <span class="session-item__indicator"></span>
+              <span v-if="chatStore.isWaiting(session.id)" class="session-item__pulse"></span>
+              <span v-else class="session-item__indicator"></span>
               <Icon name="message-circle" :size="14" class="session-item__icon" />
               <span class="session-item__title">{{ session.title }}</span>
               <span v-if="session.cliSessionId" class="session-item__cli-badge" :title="session.cliSessionId">
@@ -141,15 +165,22 @@ function closeToolPicker() {
 
     <!-- 底部导航 -->
     <div class="sidebar__footer">
-      <button class="sidebar__footer-btn" @click="router.push('/plugins')">
+      <button class="sidebar__footer-btn" @click="goToPlugins">
         <Icon name="package" :size="16" />
         <span>Plugins</span>
       </button>
-      <button class="sidebar__footer-btn" @click="router.push('/settings')">
+      <button class="sidebar__footer-btn" @click="goToSettings">
         <Icon name="settings" :size="16" />
         <span>Settings</span>
       </button>
     </div>
+
+    <!-- 自定义文件浏览器 -->
+    <FileBrowser
+      :visible="showFileBrowser"
+      @select="handleFileSelect"
+      @cancel="handleFileBrowserCancel"
+    />
 
     <!-- 工具选择浮层 -->
     <Teleport to="body">
@@ -501,6 +532,51 @@ function closeToolPicker() {
   transition: all $duration-fast $ease-out;
 }
 
+// 运行中脉冲圆点
+.session-item__pulse {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: $radius-full;
+  background: var(--neu-success, var(--neu-accent));
+  animation: session-pulse 1.4s ease-in-out infinite;
+  z-index: 1;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: $radius-full;
+    background: rgba(var(--neu-accent-rgb), 0.3);
+    animation: session-pulse-ring 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes session-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(0.75);
+  }
+}
+
+@keyframes session-pulse-ring {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+
 .session-item__icon {
   color: var(--neu-text-muted);
   flex-shrink: 0;
@@ -558,6 +634,7 @@ function closeToolPicker() {
   padding: 6px 8px;
   // 毛玻璃分隔线
   position: relative;
+  -webkit-app-region: no-drag;
 
   &::before {
     content: '';

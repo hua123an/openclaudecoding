@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePluginStore } from '../stores/plugin'
 import Icon from '../components/common/Icon.vue'
 
+const router = useRouter()
 const pluginStore = usePluginStore()
 const activeTab = ref<'installed' | 'marketplace'>('installed')
 const searchQuery = ref('')
@@ -63,6 +65,10 @@ function refresh() {
 <template>
   <div class="plugin-view">
     <div class="plugin-view__header">
+      <button class="plugin-view__back" @click="router.back()">
+        <Icon name="arrow-left" :size="16" />
+        <span>返回</span>
+      </button>
       <h2 class="plugin-view__title">
         <Icon name="package" :size="18" />
         <span>插件管理</span>
@@ -205,11 +211,39 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 .plugin-view__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
+.plugin-view__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--glass-border, var(--neu-border));
+  border-radius: $radius-md;
+  color: var(--neu-text-secondary);
+  font-size: 13px;
+  font-family: $font-sans;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background $duration-fast $ease-out,
+    color $duration-fast $ease-out;
+
+  &:hover {
+    color: var(--neu-text-primary);
+    background: var(--glass-bg-hover, var(--neu-bg-hover));
+  }
+
+  &:active {
+    background: var(--glass-bg-active, var(--neu-bg-active));
+  }
+}
+
 .plugin-view__title {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;

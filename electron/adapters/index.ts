@@ -46,7 +46,17 @@ function parseClaudeStreamEvent(line: string): StreamEventResult | null {
       result.toolEnd = { index: obj.index }
     }
 
-    return (result.text || result.sessionId || result.toolStart || result.toolInputDelta || result.toolEnd) ? result : null
+    // result 事件提取 usage
+    if (obj.type === 'result' && obj.usage) {
+      result.usage = {
+        inputTokens: obj.usage.input_tokens || 0,
+        outputTokens: obj.usage.output_tokens || 0,
+        cacheCreationInputTokens: obj.usage.cache_creation_input_tokens || 0,
+        cacheReadInputTokens: obj.usage.cache_read_input_tokens || 0,
+      }
+    }
+
+    return (result.text || result.sessionId || result.toolStart || result.toolInputDelta || result.toolEnd || result.usage) ? result : null
   } catch {
     return null
   }

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { Session, Workspace, CliToolInfo } from '../types'
 import { useChatStore } from './chat'
+import router from '../router'
 
 export const useSessionStore = defineStore('session', () => {
   // === Workspaces ===
@@ -137,9 +138,17 @@ export const useSessionStore = defineStore('session', () => {
           const next = ws.sessions[Math.max(0, idx - 1)]
           if (next) {
             activeSessionId.value = next.id
+            router.push(`/session/${next.id}`)
           } else {
             const allSessions = workspaces.value.flatMap((w) => w.sessions)
-            activeSessionId.value = allSessions.length > 0 ? allSessions[allSessions.length - 1].id : null
+            if (allSessions.length > 0) {
+              const last = allSessions[allSessions.length - 1]
+              activeSessionId.value = last.id
+              router.push(`/session/${last.id}`)
+            } else {
+              activeSessionId.value = null
+              router.push('/')
+            }
           }
         }
         break
@@ -155,11 +164,18 @@ export const useSessionStore = defineStore('session', () => {
       window.electronAPI.messageCancel(s.id)
       chatStore.clearSession(s.id)
     }
-    workspaces.value = workspaces.value.filter((w) => w.path !== path)
     if (activeSession.value && activeSession.value.projectPath === path) {
-      const allSessions = workspaces.value.flatMap((w) => w.sessions)
-      activeSessionId.value = allSessions.length > 0 ? allSessions[allSessions.length - 1].id : null
+      const allSessions = workspaces.value.filter(w => w.path !== path).flatMap((w) => w.sessions)
+      if (allSessions.length > 0) {
+        const last = allSessions[allSessions.length - 1]
+        activeSessionId.value = last.id
+        router.push(`/session/${last.id}`)
+      } else {
+        activeSessionId.value = null
+        router.push('/')
+      }
     }
+    workspaces.value = workspaces.value.filter((w) => w.path !== path)
   }
 
   function toggleWorkspace(path: string) {
@@ -175,6 +191,11 @@ export const useSessionStore = defineStore('session', () => {
         break
       }
     }
+  }
+
+  /** 清除活跃会话（用于导航到设置/插件等非会话页面） */
+  function clearActive() {
+    activeSessionId.value = null
   }
 
   function renameSession(sessionId: string, newTitle: string) {
@@ -231,6 +252,7 @@ export const useSessionStore = defineStore('session', () => {
     removeWorkspace,
     toggleWorkspace,
     setActive,
+    clearActive,
     renameSession,
     updateCliSessionId,
     tools,

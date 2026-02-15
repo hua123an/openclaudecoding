@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
-import type { MessageBlock, SessionMessages, ExecutionItem, ExecutionType } from '../types'
+import type { MessageBlock, SessionMessages, ExecutionItem, ExecutionType, UsageData } from '../types'
 import { ansiToHtml, stripAnsi } from '../services/ansiRenderer'
 import { parseExecutions } from '../services/executionParser'
 import { renderMarkdown, renderMarkdownFast } from '../services/markdownRenderer'
@@ -243,6 +243,32 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /** 将 usage 数据附加到当前/最近 assistant 消息 */
+  function updateUsage(sessionId: string, usage: UsageData): void {
+    const session = sessionMap.get(sessionId)
+    if (!session) return
+    // 优先用 streamingMessageId 查找，否则回退到最后一条 assistant 消息
+    const msg = session.streamingMessageId
+      ? session.messages.find(m => m.id === session.streamingMessageId)
+      : [...session.messages].reverse().find(m => m.role === 'assistant')
+    if (msg) {
+      msg.usage = usage
+    }
+  }
+
+  /** 计算会话累计 token */
+  function getSessionUsage(sessionId: string): { totalInput: number; totalOutput: number } {
+    const msgs = getMessages(sessionId)
+    let totalInput = 0, totalOutput = 0
+    for (const m of msgs) {
+      if (m.usage) {
+        totalInput += m.usage.inputTokens
+        totalOutput += m.usage.outputTokens
+      }
+    }
+    return { totalInput, totalOutput }
+  }
+
   return {
     sessionMap,
     ensureSession,
@@ -261,5 +287,7 @@ export const useChatStore = defineStore('chat', () => {
     removeMessage,
     getLastUserMessageBefore,
     loadHistoryMessages,
+    updateUsage,
+    getSessionUsage,
   }
 })

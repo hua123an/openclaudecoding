@@ -7,6 +7,7 @@ import { ptyManager } from '../pty/ptyManager'
 import { toolDetector } from '../services/toolDetector'
 import { projectManager } from '../services/projectManager'
 import { workspaceManager } from '../services/workspaceManager'
+import { settingsManager } from '../services/settingsManager'
 import { messageRunner } from '../services/messageRunner'
 import { listCliSessions, loadCliSessionMessages } from '../services/sessionList'
 import { allAdapters } from '../adapters'
@@ -94,6 +95,9 @@ export function registerIpcHandlers(): void {
       onToolUse: (toolUse) => {
         safeSend(`message:tool-use:${opts.sessionId}`, toolUse)
       },
+      onUsage: (usage) => {
+        safeSend(`message:usage:${opts.sessionId}`, usage)
+      },
       onDone: (code) => {
         safeSend(`message:done:${opts.sessionId}`, code)
       },
@@ -160,6 +164,42 @@ export function registerIpcHandlers(): void {
     return tempFile
   })
 
+  // ===== File System（自定义文件浏览器） =====
+  ipcMain.handle('fs:home-dir', () => {
+    return os.homedir()
+  })
+
+  ipcMain.handle('fs:read-dir', async (_event, dirPath: string) => {
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+      const items: { name: string; path: string; isDirectory: boolean; size: number; mtime: number }[] = []
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue // 隐藏文件
+        const fullPath = path.join(dirPath, entry.name)
+        try {
+          const stat = fs.statSync(fullPath)
+          items.push({
+            name: entry.name,
+            path: fullPath,
+            isDirectory: entry.isDirectory(),
+            size: stat.size,
+            mtime: stat.mtimeMs,
+          })
+        } catch {
+          // 无权限等情况，跳过
+        }
+      }
+      // 文件夹优先，同类按名称排序
+      items.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+      return items
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  })
+
   // ===== Project =====
   ipcMain.handle('project:open-dialog', async () => {
     const result = await dialog.showOpenDialog({
@@ -193,6 +233,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:save', (_event, state: any) => {
     workspaceManager.save(state)
+    return { success: true }
+  })
+
+  // ===== Settings Persistence =====
+  ipcMain.handle('settings:load', () => {
+    return settingsManager.load()
+  })
+
+  ipcMain.handle('settings:save', (_event, state: any) => {
+    settingsManager.save(state)
     return { success: true }
   })
 

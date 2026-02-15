@@ -314,6 +314,18 @@ function hasDiff(exec: ExecutionItem): boolean {
           </button>
         </div>
 
+        <!-- Token 用量标签 -->
+        <div v-if="message.usage && message.status === 'complete'" class="message-card__usage">
+          <span class="message-card__usage-item message-card__usage-item--in">
+            <Icon name="arrow-down-left" :size="11" />
+            {{ formatTokens(message.usage.inputTokens) }}
+          </span>
+          <span class="message-card__usage-item message-card__usage-item--out">
+            <Icon name="arrow-up-right" :size="11" />
+            {{ formatTokens(message.usage.outputTokens) }}
+          </span>
+        </div>
+
         <!-- 操作按钮行 -->
         <div v-if="message.status === 'complete'" class="message-card__actions">
           <button class="message-card__action-btn" title="复制" @click="copyMessage">
@@ -332,6 +344,12 @@ function hasDiff(exec: ExecutionItem): boolean {
 function formatTime(ts: number): string {
   const d = new Date(ts)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return String(n)
 }
 </script>
 
@@ -434,6 +452,27 @@ $ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   align-items: center;
   gap: 2px;
   padding: 2px 8px 6px;
+}
+
+// ── Token 用量标签 ──
+.message-card__usage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 4px;
+}
+
+.message-card__usage-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: $font-mono;
+  color: var(--neu-text-muted);
+  opacity: 0.7;
+
+  &--in { color: var(--neu-accent, #5b8def); }
+  &--out { color: var(--neu-success, #43a047); }
 }
 
 .message-card__action-btn {

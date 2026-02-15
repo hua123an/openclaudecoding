@@ -24,6 +24,12 @@ export const useProjectStore = defineStore('project', () => {
     window.electronAPI.projectAddRecent(path)
   }
 
+  async function setCurrentAndAddRecent(dir: string) {
+    currentProject.value = dir
+    await window.electronAPI.projectAddRecent(dir)
+    await loadRecent()
+  }
+
   async function removeRecent(path: string) {
     await window.electronAPI.projectRemoveRecent(path)
     await loadRecent()
@@ -35,6 +41,7 @@ export const useProjectStore = defineStore('project', () => {
     loadRecent,
     openDialog,
     setCurrentProject,
+    setCurrentAndAddRecent,
     removeRecent,
   }
 })

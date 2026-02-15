@@ -97,6 +97,7 @@ export interface MessageBlock {
   status: MessageStatus
   createdAt: number
   updatedAt: number
+  usage?: UsageData
 }
 
 /** 会话消息集合 */
@@ -105,6 +106,16 @@ export interface SessionMessages {
   messages: MessageBlock[]
   isWaitingResponse: boolean
   streamingMessageId: string | null
+}
+
+// ===== 用量统计 =====
+
+/** Token 用量数据 */
+export interface UsageData {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
 }
 
 // ===== 模型切换 =====

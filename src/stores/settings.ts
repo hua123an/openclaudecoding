@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { ModelOption } from '../types'
 
 /** 静态 fallback 模型列表（按 大杯/中杯/小杯 排列） */
@@ -75,6 +75,9 @@ export const useSettingsStore = defineStore('settings', () => {
   /** 思考模式开关 */
   const thinkingMode = ref(false)
 
+  /** 是否已完成初始化加载（防止加载时触发 save） */
+  let initialized = false
+
   function applyTheme(t: 'dark' | 'light') {
     theme.value = t
     if (t === 'dark') {
@@ -82,16 +85,54 @@ export const useSettingsStore = defineStore('settings', () => {
     } else {
       document.documentElement.removeAttribute('data-theme')
     }
+    persistIfReady()
   }
 
-  // 跟随系统主题
+  /** 持久化到本地文件 */
+  function persistIfReady() {
+    if (!initialized) return
+    window.electronAPI.settingsSave({
+      theme: theme.value,
+      fontSize: fontSize.value,
+      fontFamily: fontFamily.value,
+      selectedModels: { ...selectedModels.value },
+      thinkingMode: thinkingMode.value,
+    }).catch(() => {})
+  }
+
+  /** 从本地文件恢复设置 */
+  async function loadFromDisk() {
+    try {
+      const saved = await window.electronAPI.settingsLoad()
+      if (saved) {
+        if (saved.theme) applyTheme(saved.theme)
+        if (saved.fontSize) fontSize.value = saved.fontSize
+        if (saved.fontFamily) fontFamily.value = saved.fontFamily
+        if (saved.selectedModels) {
+          selectedModels.value = { ...selectedModels.value, ...saved.selectedModels }
+          if (saved.selectedModels['claude-code']) {
+            selectedModel.value = saved.selectedModels['claude-code']
+          }
+        }
+        if (saved.thinkingMode !== undefined) thinkingMode.value = saved.thinkingMode
+      }
+    } catch {}
+    initialized = true
+  }
+
+  // 初始化：先跟随系统主题（快速显示），然后异步从磁盘加载覆盖
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   applyTheme(mq.matches ? 'dark' : 'light')
+  loadFromDisk()
 
+  // 监听系统主题变化（仅当用户没有手动设置时）
   function onSystemChange(e: MediaQueryListEvent) {
     applyTheme(e.matches ? 'dark' : 'light')
   }
   mq.addEventListener('change', onSystemChange)
+
+  // 自动保存：监听会触发改变的 ref
+  watch([fontSize, fontFamily, thinkingMode], () => persistIfReady())
 
   function setModel(modelId: string) {
     selectedModel.value = modelId
@@ -118,6 +159,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (toolId === 'claude-code') {
       selectedModel.value = modelId
     }
+    persistIfReady()
   }
 
   /** 切换思考模式 */
@@ -180,6 +222,7 @@ export const useSettingsStore = defineStore('settings', () => {
     models,
     selectedModels,
     thinkingMode,
+    applyTheme,
     setModel,
     getModelsForTool,
     getSelectedModel,

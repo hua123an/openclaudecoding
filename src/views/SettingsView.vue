@@ -1,16 +1,25 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useSettingsStore } from '../stores/settings'
+import { useSessionStore } from '../stores/session'
 import { useRouter } from 'vue-router'
 import Icon from '../components/common/Icon.vue'
 
 const settings = useSettingsStore()
+const sessionStore = useSessionStore()
 const router = useRouter()
+
+/** 有可选模型的已安装工具 */
+const toolsWithModels = computed(() => {
+  return sessionStore.tools
+    .filter(t => t.installed && settings.getModelsForTool(t.id).length > 0)
+})
 </script>
 
 <template>
   <div class="settings">
     <div class="settings__header">
-      <button class="settings__back" @click="router.push('/')">
+      <button class="settings__back" @click="router.back()">
         <Icon name="arrow-left" :size="16" />
         <span>返回</span>
       </button>
@@ -18,8 +27,31 @@ const router = useRouter()
     </div>
 
     <div class="settings__content">
+      <!-- 外观 -->
       <div class="settings__group">
         <h2 class="settings__group-title">外观</h2>
+
+        <div class="settings__row">
+          <label class="settings__label">主题</label>
+          <div class="settings__pills">
+            <button
+              class="settings__pill"
+              :class="{ 'settings__pill--active': settings.theme === 'dark' }"
+              @click="settings.applyTheme('dark')"
+            >
+              <Icon name="moon" :size="13" />
+              深色
+            </button>
+            <button
+              class="settings__pill"
+              :class="{ 'settings__pill--active': settings.theme === 'light' }"
+              @click="settings.applyTheme('light')"
+            >
+              <Icon name="sun" :size="13" />
+              浅色
+            </button>
+          </div>
+        </div>
 
         <div class="settings__row">
           <label class="settings__label">终端字号</label>
@@ -41,6 +73,51 @@ const router = useRouter()
             :value="settings.fontFamily"
             @input="settings.fontFamily = ($event.target as HTMLInputElement).value"
           />
+        </div>
+      </div>
+
+      <!-- 模型 -->
+      <div v-if="toolsWithModels.length > 0" class="settings__group">
+        <h2 class="settings__group-title">模型</h2>
+
+        <div
+          v-for="tool in toolsWithModels"
+          :key="tool.id"
+          class="settings__row"
+        >
+          <label class="settings__label">{{ tool.name }}</label>
+          <select
+            class="settings__select"
+            :value="settings.getSelectedModel(tool.id)"
+            @change="settings.setModelForTool(tool.id, ($event.target as HTMLSelectElement).value)"
+          >
+            <option
+              v-for="m in settings.getModelsForTool(tool.id)"
+              :key="m.id"
+              :value="m.id"
+            >
+              {{ m.label || m.id }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 高级 -->
+      <div class="settings__group">
+        <h2 class="settings__group-title">高级</h2>
+
+        <div class="settings__row">
+          <label class="settings__label">
+            <Icon name="lightbulb" :size="14" />
+            思考模式
+          </label>
+          <button
+            class="settings__toggle"
+            :class="{ 'settings__toggle--on': settings.thinkingMode }"
+            @click="settings.toggleThinking()"
+          >
+            <span class="settings__toggle-thumb"></span>
+          </button>
         </div>
       </div>
     </div>
@@ -120,7 +197,6 @@ const router = useRouter()
   padding-left: 12px;
   position: relative;
 
-  // 细线分隔替代内凹 box-shadow
   &::after {
     content: '';
     position: absolute;
@@ -131,7 +207,6 @@ const router = useRouter()
     background: var(--glass-border, var(--neu-border));
   }
 
-  // 左侧指示条
   &::before {
     content: '';
     position: absolute;
@@ -152,7 +227,6 @@ const router = useRouter()
   justify-content: space-between;
   padding: 14px 0;
 
-  // 用间距分隔，不用 border
   & + & {
     margin-top: 2px;
   }
@@ -162,6 +236,9 @@ const router = useRouter()
   font-size: 14px;
   color: var(--neu-text-secondary);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 // ---- Input / Select ----
@@ -202,5 +279,74 @@ const router = useRouter()
   background-position: right 10px center;
   padding-right: 30px;
   cursor: pointer;
+}
+
+// ---- Theme Pills ----
+.settings__pills {
+  display: flex;
+  gap: 4px;
+  background: var(--glass-bg-surface, var(--neu-bg));
+  border: 1px solid var(--glass-border, var(--neu-border));
+  border-radius: $radius-md;
+  padding: 3px;
+}
+
+.settings__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: $font-sans;
+  font-weight: 500;
+  color: var(--neu-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: all $duration-fast $ease-out;
+
+  &:hover {
+    color: var(--neu-text-primary);
+    background: var(--glass-bg-hover, var(--neu-bg-hover));
+  }
+
+  &--active {
+    color: var(--neu-accent);
+    background: rgba(var(--neu-accent-rgb), 0.12);
+  }
+}
+
+// ---- Toggle Switch ----
+.settings__toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border: none;
+  border-radius: 12px;
+  background: var(--glass-bg-surface, var(--neu-bg-active));
+  cursor: pointer;
+  transition: background $duration-fast $ease-out;
+  padding: 0;
+
+  &--on {
+    background: var(--neu-accent);
+  }
+}
+
+.settings__toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform $duration-fast $ease-out;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+
+  .settings__toggle--on & {
+    transform: translateX(20px);
+  }
 }
 </style>

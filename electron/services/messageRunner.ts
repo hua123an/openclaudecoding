@@ -21,6 +21,7 @@ export interface MessageRunnerOpts {
   onData: (data: string) => void
   onSessionId?: (sessionId: string) => void
   onToolUse?: (toolUse: { name: string; input?: string; content?: string }) => void
+  onUsage?: (usage: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number }) => void
   onDone: (code: number) => void
   onError: (error: string) => void
 }
@@ -134,6 +135,11 @@ export class MessageRunner {
             const content = this.extractToolContent(block.name, block.inputJson)
             opts.onToolUse?.({ name: block.name, input: detail, content })
           }
+        }
+
+        // usage 信息
+        if (event.usage) {
+          opts.onUsage?.(event.usage)
         }
       }
 

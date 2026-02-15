@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
 defineProps<{
   sessionId: string
@@ -28,6 +28,14 @@ function handleEdit(text: string) {
 function handleRegenerate(messageId: string) {
   emit('regenerate', messageId)
 }
+
+function focusInput() {
+  nextTick(() => {
+    chatInputRef.value?.focus()
+  })
+}
+
+defineExpose({ focusInput })
 </script>
 
 <template>

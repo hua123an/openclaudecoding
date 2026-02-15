@@ -1,7 +1,9 @@
 {
   "name": "openclaudecoding",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.0.6",
+  "description": "AI Coding Agent unified desktop client",
+  "author": "huaan",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
+import { useChatStore } from '../../stores/chat'
+import Icon from '../common/Icon.vue'
 
 const store = useSessionStore()
+const chatStore = useChatStore()
 
 const activeToolName = computed(() => {
   if (!store.activeSession) return ''
@@ -12,6 +15,19 @@ const activeToolName = computed(() => {
 const totalSessions = computed(() =>
   store.workspaces.reduce((sum, ws) => sum + ws.sessions.length, 0)
 )
+
+const sessionUsage = computed(() => {
+  if (!store.activeSessionId) return null
+  const usage = chatStore.getSessionUsage(store.activeSessionId)
+  if (usage.totalInput === 0 && usage.totalOutput === 0) return null
+  return usage
+})
+
+function fmtTokens(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+  return String(n)
+}
 </script>
 
 <template>
@@ -26,6 +42,10 @@ const totalSessions = computed(() =>
       </span>
     </div>
     <div class="statusbar__right">
+      <span v-if="sessionUsage" class="statusbar__item statusbar__tokens">
+        <Icon name="zap" :size="11" />
+        {{ fmtTokens(sessionUsage.totalInput) }} in / {{ fmtTokens(sessionUsage.totalOutput) }} out
+      </span>
       <span class="statusbar__item statusbar__stats">
         {{ store.workspaces.length }} projects · {{ totalSessions }} sessions
       </span>
@@ -100,6 +120,16 @@ const totalSessions = computed(() =>
 
 .statusbar__stats {
   color: var(--neu-text-muted);
+  flex-shrink: 0;
+}
+
+.statusbar__tokens {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--neu-accent);
+  font-family: $font-mono;
+  font-size: 10px;
   flex-shrink: 0;
 }
 </style>

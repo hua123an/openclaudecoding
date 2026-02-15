@@ -10,6 +10,13 @@ export interface StreamEventResult {
   toolInputDelta?: { index: number; json: string }
   /** 工具调用块结束（content_block_stop） */
   toolEnd?: { index: number }
+  /** token 用量（来自 type:'result' 事件） */
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+  }
 }
 
 export interface BuildCommandOpts {

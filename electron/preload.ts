@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },
+  onMessageUsage: (sessionId: string, callback: (usage: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number }) => void) => {
+    const channel = `message:usage:${sessionId}`
+    const handler = (_event: any, usage: any) => callback(usage)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  },
 
   // ===== Shell（外部链接） =====
   openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
@@ -74,6 +80,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toolDetectAll: () => ipcRenderer.invoke('tool:detect-all'),
   toolDetect: (toolId: string) => ipcRenderer.invoke('tool:detect', toolId),
 
+  // ===== File System（自定义文件浏览器） =====
+  fsReadDir: (dirPath: string) => ipcRenderer.invoke('fs:read-dir', dirPath),
+  fsHomeDir: () => ipcRenderer.invoke('fs:home-dir'),
+
   // ===== Project =====
   projectOpenDialog: () => ipcRenderer.invoke('project:open-dialog'),
   projectRecent: () => ipcRenderer.invoke('project:recent'),
@@ -83,6 +93,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ===== Workspace Persistence =====
   workspaceLoad: () => ipcRenderer.invoke('workspace:load'),
   workspaceSave: (state: any) => ipcRenderer.invoke('workspace:save', state),
+
+  // ===== Settings Persistence =====
+  settingsLoad: () => ipcRenderer.invoke('settings:load'),
+  settingsSave: (state: any) => ipcRenderer.invoke('settings:save', state),
 
   // ===== Claude Settings =====
   readClaudeSettings: () => ipcRenderer.invoke('claude:read-settings'),
